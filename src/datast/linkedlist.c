@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "linkedlist/linkedlist.h"
+#include "datast/linkedlist.h"
 
 struct llist_t {
   node_t *head;

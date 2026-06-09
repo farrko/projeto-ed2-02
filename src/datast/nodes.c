@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#include "linkedlist/nodes.h"
+#include "datast/nodes.h"
 
 struct node_t {
   void *value;
@@ -60,5 +60,3 @@ void node_destroy(node_t *node) {
 
   free(node);
 }
-
-
