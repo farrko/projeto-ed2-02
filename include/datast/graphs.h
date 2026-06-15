@@ -113,6 +113,25 @@ void graph_add_node(graph_t *graph, gnode_t *node);
   */
 void graph_add_edge(graph_t *graph, gnode_t *src, gnode_t *dst, double distance, double cost);
 
+/** @brief    Converte um grafo dirigido em um grafo não-dirigido equivalente.
+  *
+  * @param    graph     Pointer para o grafo dirigido de origem.
+  *
+  * @return   Pointer para um novo grafo não-dirigido, onde para cada aresta
+  *           dirigida do grafo original, a aresta reversa também está presente.
+  *           O grafo retornado é independente do original e deve ser destruído
+  *           pelo chamador.
+  *
+  * @note     A conversão é feita em três etapas: clonagem dos nós, cópia das
+  *           arestas com remapeamento dos ponteiros de destino, e inserção das
+  *           arestas reversas ausentes. Arestas já mútuas no grafo original não
+  *           são duplicadas.
+  *
+  * @note     Os pesos @p distance e @p cost da aresta reversa inserida são
+  *           herdados da aresta original, assumindo simetria de custo e distância.
+  */
+graph_t *graph_to_undirected(graph_t *graph);
+
 /** @brief    Destrói um grafo e libera toda a memória associada a ele.
   *
   * @param    graph  Pointer para o grafo a ser destruído.

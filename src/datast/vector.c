@@ -95,3 +95,20 @@ void vec_pop_back(vector_t *v) {
 
   v->size--;
 }
+
+vector_t *vec_clone(vector_t *v) {
+  vector_t *clone = vec_init(v->data_size);
+
+  clone->size = v->size;
+  clone->capacity = v->capacity;
+
+  clone->data = malloc(clone->data_size * clone->capacity);
+  if (!clone->data) {
+    printf("Erro na alocação de memória.\n");
+    exit(1);
+  }
+
+  memcpy(clone->data, v->data, v->data_size * v->capacity);
+
+  return clone;
+}

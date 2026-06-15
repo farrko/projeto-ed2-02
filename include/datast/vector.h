@@ -105,4 +105,18 @@ void vec_push_back(vector_t *v, void *data);
   */
 void vec_pop_back(vector_t *v);
 
+/** @brief    Clona um vetor, criando uma cópia superficial independente.
+  *
+  * @param    v         Pointer para o vetor a ser clonado.
+  *
+  * @return   Pointer para um novo vetor com os mesmos elementos e tamanho
+  *           do vetor original. O vetor retornado é independente do original
+  *           e deve ser destruído pelo chamador com @p vec_destroy.
+  *
+  * @warning  A cópia é superficial: elementos que sejam ponteiros continuarão
+  *           apontando para os mesmos endereços de memória do vetor original.
+  *           Modificações nos dados apontados afetarão ambos os vetores.
+  */
+vector_t *vec_clone(vector_t *v);
+
 #endif

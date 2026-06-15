@@ -30,4 +30,6 @@ char *r_strcat(char *s1, char *s2);
  */
 size_t strnlen(const char *str, size_t maxlen);
 
+char *ns_strncpy(const char *str, size_t maxlen);
+
 #endif

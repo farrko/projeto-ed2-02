@@ -19,18 +19,18 @@ struct gnode_t {
   vector_t *connections;
 };
 
+typedef struct {
+  gnode_t *dst;
+  double distance;
+  double cost;
+} connections_t;
+
 struct dijkstra_connections_t {
   gnode_t *node;
   gnode_t *from;
   double cost;
   bool visited;
 };
-
-typedef struct {
-  gnode_t *dst;
-  double distance;
-  double cost;
-} connections_t;
 
 gnode_t *gnode_init(const char *key, void *data) {
   gnode_t *gnode = malloc(sizeof(gnode_t));
@@ -106,6 +106,63 @@ void graph_add_edge(graph_t *graph, gnode_t *src, gnode_t *dst, double distance,
 
   connections_t conn = { dst, distance, cost };
   vec_push_back(src->connections, &conn);
+}
+
+graph_t *graph_to_undirected(graph_t *graph) {
+  graph_t *undirected = graph_init();
+  
+  size_t nodes_size = vec_get_size(graph->nodes);
+  hashmap_t *hm = hm_init(nodes_size * 2);
+
+  for (size_t i = 0; i < nodes_size; i++) {
+    gnode_t *ori = *(gnode_t **) vec_at(graph->nodes, i);
+    gnode_t *cln = gnode_init(ori->key, ori->data);
+    graph_add_node(undirected, cln);
+    hm_set(hm, ori->key, cln, NULL);
+  }
+
+  for (size_t i = 0; i < nodes_size; i++) {
+    gnode_t *ori = *(gnode_t **) vec_at(graph->nodes, i);
+    gnode_t *cln = *(gnode_t **) vec_at(undirected->nodes, i);
+
+    size_t conn_size = vec_get_size(ori->connections);
+    for (size_t j = 0; j < conn_size; j++) {
+      connections_t *c = vec_at(ori->connections, j);
+      gnode_t *new_dst = hm_get(hm, c->dst->key);
+
+      connections_t new_conn = { new_dst, c->distance, c->cost };
+      vec_push_back(cln->connections, &new_conn);
+    }
+  }
+
+  for (size_t i = 0; i < nodes_size; i++) {
+    gnode_t *src = *(gnode_t **) vec_at(undirected->nodes, i);
+
+    size_t conn_size = vec_get_size(src->connections);
+    for (size_t j = 0; j < conn_size; j++) {
+      connections_t *c = vec_at(src->connections, j);
+      gnode_t *dst = c->dst;
+
+      bool has_reverse = false;
+      size_t dst_conn_n = vec_get_size(dst->connections);
+      for (size_t k = 0; k < dst_conn_n; k++) {
+        connections_t *dc = vec_at(dst->connections, k);
+
+        if (dc->dst != src) continue;
+
+        has_reverse = true;
+        break;
+      }
+
+      if (has_reverse) continue;
+
+      connections_t rev = { src, c->distance, c->cost };
+      vec_push_back(dst->connections, &rev);
+    }
+  }
+  
+  hm_destroy(hm);
+  return undirected;
 }
 
 void graph_destroy(graph_t *graph) {

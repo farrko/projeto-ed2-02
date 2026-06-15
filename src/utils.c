@@ -17,3 +17,11 @@ size_t strnlen(const char *str, size_t maxlen) {
 
   return maxlen;
 }
+
+char *ns_strncpy(const char *str, size_t maxlen) {
+  size_t len = strnlen(str, maxlen);
+  char *ns = malloc(len + 1);
+  strncpy(ns, str, len);
+  ns[len] = '\0';
+  return ns;
+}
