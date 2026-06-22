@@ -1,6 +1,7 @@
 #include "unity/unity.h"
 #include "datast/graphs.h"
 #include "datast/vector.h"
+#include "datast/hashmap.h"
 #include <math.h>
 #include <stdlib.h>
 
@@ -39,13 +40,25 @@ static edge_info_t *make_edge_info(double distance, double cost) {
   return info;
 }
 
-static void free_node_edges_info(gnode_t *node) {
-  vector_t *connections = gnode_get_connections(node);
-  size_t size = vec_get_size(connections);
-  for (size_t i = 0; i < size; i++) {
-    edge_t *edge = *(edge_t **) vec_at(connections, i);
-    free(edge_get_info(edge));
-  }
+static void edge_info_destroy(void *info) {
+  free(info);
+}
+
+static void *int_info_clone(const void *info) {
+  const int *original = info;
+  int *clone = malloc(sizeof(int));
+  *clone = *original;
+  return clone;
+}
+
+static void int_info_destroy(void *info) {
+  free(info);
+}
+
+static int *make_int(int value) {
+  int *p = malloc(sizeof(int));
+  *p = value;
+  return p;
 }
 
 void setUp(void) {}
@@ -55,7 +68,7 @@ static void build_test_graph(graph_t **graph, gnode_t **a, gnode_t **b, gnode_t 
   *a = gnode_init("A", NULL);
   *b = gnode_init("B", NULL);
   *c = gnode_init("C", NULL);
-  *graph = graph_init();
+  *graph = graph_init(NULL, NULL, NULL, edge_info_destroy);
   graph_add_node(*graph, *a);
   graph_add_node(*graph, *b);
   graph_add_node(*graph, *c);
@@ -65,9 +78,7 @@ static void build_test_graph(graph_t **graph, gnode_t **a, gnode_t **b, gnode_t 
 }
 
 static void destroy_test_graph(graph_t *graph, gnode_t *a, gnode_t *b, gnode_t *c) {
-  free_node_edges_info(a);
-  free_node_edges_info(b);
-  free_node_edges_info(c);
+  (void) a; (void) b; (void) c;
   graph_destroy(graph);
 }
 
@@ -93,14 +104,14 @@ void test_gnode_conexoes_inicialmente_vazias(void) {
 /* ── graph ──────────────────────────────────────────────────────────────────── */
 
 void test_graph_init_sem_nos(void) {
-  graph_t *graph = graph_init();
+  graph_t *graph = graph_init(NULL, NULL, NULL, NULL);
   TEST_ASSERT_NOT_NULL(graph);
   TEST_ASSERT_EQUAL_size_t(0, vec_get_size(graph_get_nodes(graph)));
   graph_destroy(graph);
 }
 
 void test_graph_add_node(void) {
-  graph_t *graph = graph_init();
+  graph_t *graph = graph_init(NULL, NULL, NULL, NULL);
   gnode_t *node = gnode_init("A", NULL);
   graph_add_node(graph, node);
   TEST_ASSERT_EQUAL_size_t(1, vec_get_size(graph_get_nodes(graph)));
@@ -108,7 +119,7 @@ void test_graph_add_node(void) {
 }
 
 void test_graph_add_multiplos_nos(void) {
-  graph_t *graph = graph_init();
+  graph_t *graph = graph_init(NULL, NULL, NULL, NULL);
   gnode_t *a = gnode_init("A", NULL);
   gnode_t *b = gnode_init("B", NULL);
   gnode_t *c = gnode_init("C", NULL);
@@ -120,7 +131,7 @@ void test_graph_add_multiplos_nos(void) {
 }
 
 void test_graph_add_edge_registra_conexao_em_src(void) {
-  graph_t *graph = graph_init();
+  graph_t *graph = graph_init(NULL, NULL, NULL, NULL);
   gnode_t *a = gnode_init("A", NULL);
   gnode_t *b = gnode_init("B", NULL);
   graph_add_node(graph, a);
@@ -133,7 +144,7 @@ void test_graph_add_edge_registra_conexao_em_src(void) {
 }
 
 void test_graph_add_edge_nao_afeta_dst(void) {
-  graph_t *graph = graph_init();
+  graph_t *graph = graph_init(NULL, NULL, NULL, NULL);
   gnode_t *a = gnode_init("A", NULL);
   gnode_t *b = gnode_init("B", NULL);
   graph_add_node(graph, a);
@@ -146,7 +157,7 @@ void test_graph_add_edge_nao_afeta_dst(void) {
 }
 
 void test_graph_add_edge_destino_correto(void) {
-  graph_t *graph = graph_init();
+  graph_t *graph = graph_init(NULL, NULL, NULL, NULL);
   gnode_t *a = gnode_init("A", NULL);
   gnode_t *b = gnode_init("B", NULL);
   graph_add_node(graph, a);
@@ -156,6 +167,83 @@ void test_graph_add_edge_destino_correto(void) {
   edge_t *edge = *(edge_t **) vec_at(gnode_get_connections(a), 0);
   TEST_ASSERT_EQUAL_PTR(b, edge_get_dst(edge));
   free(info);
+  graph_destroy(graph);
+}
+
+/* ── índice de nós ──────────────────────────────────────────────────────────── */
+
+void test_graph_node_index_localiza_nos_existentes(void) {
+  graph_t *graph; gnode_t *a, *b, *c;
+  build_test_graph(&graph, &a, &b, &c);
+
+  hashmap_t *index = graph_get_node_index(graph);
+  TEST_ASSERT_NOT_NULL(index);
+  TEST_ASSERT_EQUAL_PTR(a, hm_get(index, "A"));
+  TEST_ASSERT_EQUAL_PTR(b, hm_get(index, "B"));
+  TEST_ASSERT_EQUAL_PTR(c, hm_get(index, "C"));
+
+  destroy_test_graph(graph, a, b, c);
+}
+
+void test_graph_node_index_get_retorna_mesmo_pointer_em_chamadas_subsequentes(void) {
+  graph_t *graph; gnode_t *a, *b, *c;
+  build_test_graph(&graph, &a, &b, &c);
+
+  hashmap_t *first = graph_get_node_index(graph);
+  hashmap_t *second = graph_get_node_index(graph);
+  TEST_ASSERT_EQUAL_PTR(first, second);
+
+  destroy_test_graph(graph, a, b, c);
+}
+
+void test_graph_node_index_regenerar_inclui_novo_no(void) {
+  graph_t *graph; gnode_t *a, *b, *c;
+  build_test_graph(&graph, &a, &b, &c);
+
+  graph_get_node_index(graph);
+
+  gnode_t *d = gnode_init("D", NULL);
+  graph_add_node(graph, d);
+
+  graph_generate_node_index(graph);
+  hashmap_t *index = graph_get_node_index(graph);
+  TEST_ASSERT_EQUAL_PTR(d, hm_get(index, "D"));
+
+  destroy_test_graph(graph, a, b, c);
+}
+
+/* ── ownership e clonagem ───────────────────────────────────────────────────── */
+
+void test_graph_clone_produz_grafo_independente(void) {
+  graph_t *graph = graph_init(int_info_clone, int_info_destroy, NULL, NULL);
+  gnode_t *a = gnode_init("A", make_int(10));
+  graph_add_node(graph, a);
+
+  graph_t *clone = graph_clone(graph);
+  TEST_ASSERT_NOT_NULL(clone);
+
+  gnode_t *cloned_a = *(gnode_t **) vec_at(graph_get_nodes(clone), 0);
+  TEST_ASSERT_TRUE(cloned_a != a);
+
+  int *cloned_info = gnode_get_info(cloned_a);
+  *cloned_info = 99;
+
+  int *original_info = gnode_get_info(a);
+  TEST_ASSERT_EQUAL_INT(10, *original_info);
+  TEST_ASSERT_EQUAL_INT(99, *cloned_info);
+
+  graph_destroy(graph);
+  graph_destroy(clone);
+}
+
+void test_graph_clone_falha_sem_funcao_de_clone(void) {
+  graph_t *graph = graph_init(NULL, int_info_destroy, NULL, NULL);
+  gnode_t *a = gnode_init("A", make_int(10));
+  graph_add_node(graph, a);
+
+  graph_t *clone = graph_clone(graph);
+  TEST_ASSERT_NULL(clone);
+
   graph_destroy(graph);
 }
 
@@ -285,6 +373,15 @@ int main(void) {
   RUN_TEST(test_graph_add_edge_registra_conexao_em_src);
   RUN_TEST(test_graph_add_edge_nao_afeta_dst);
   RUN_TEST(test_graph_add_edge_destino_correto);
+
+  // índice de nós
+  RUN_TEST(test_graph_node_index_localiza_nos_existentes);
+  RUN_TEST(test_graph_node_index_get_retorna_mesmo_pointer_em_chamadas_subsequentes);
+  RUN_TEST(test_graph_node_index_regenerar_inclui_novo_no);
+
+  // ownership e clonagem
+  RUN_TEST(test_graph_clone_produz_grafo_independente);
+  RUN_TEST(test_graph_clone_falha_sem_funcao_de_clone);
 
   // dijkstra
   RUN_TEST(test_dijkstra_retorna_vetor_nao_nulo);

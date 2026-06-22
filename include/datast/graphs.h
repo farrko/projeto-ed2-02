@@ -2,26 +2,36 @@
 #define GRAPHS_H
 
 #include "datast/vector.h"
+#include "datast/hashmap.h"
 #include <stdbool.h>
 
 /**
  * @file   graphs.h
- * @brief  Implementação de um grafo dirigido genérico com suporte ao algoritmo de Dijkstra.
+ * @brief  Implementação de um grafo dirigido genérico, owning, com suporte ao algoritmo
+ *         de Dijkstra.
  *
  * O módulo graphs implementa um grafo dirigido cujos nós e conexões podem carregar uma
- * informação arbitrária por meio de um ponteiro opaco (void*), permitindo que o chamador
- * associe qualquer dado de domínio (por exemplo, atributos de uma rua) sem que o grafo
- * precise conhecer sua estrutura.
+ * informação arbitrária por meio de um ponteiro opaco (void*). O grafo pode opcionalmente
+ * assumir ownership sobre essas informações: ao ser inicializado com funções de clonagem e
+ * destruição (ver graph_init()), ele passa a ser responsável por liberá-las em
+ * graph_destroy() e por duplicá-las em graph_clone()/graph_to_undirected(), dispensando o
+ * chamador de varrer manualmente nós e conexões para isso.
  *
- * O algoritmo de Dijkstra também é genérico: em vez de operar sobre campos fixos de peso,
- * ele recebe uma função (graph_weight_t) fornecida pelo chamador, que extrai de uma conexão
- * o valor numérico a ser acumulado e comparado ao longo do caminho. Isso permite calcular,
- * a partir do mesmo grafo, tanto o caminho de menor distância quanto o caminho mais rápido,
- * apenas alternando a função de peso utilizada.
+ * Caso o grafo não receba essas funções (todos os parâmetros NULL em graph_init()), ele se
+ * comporta como uma estrutura não-owning: nenhuma informação é liberada ou duplicada
+ * automaticamente, e o chamador permanece responsável pelo ciclo de vida desses dados.
  *
- * Cada nó (gnode_t) é identificado por um id textual único e carrega um dado arbitrário via
- * ponteiro opaco. Cada conexão (edge_t) liga um nó de origem a um nó de destino e também
- * carrega um dado arbitrário via ponteiro opaco.
+ * O grafo também mantém, sob demanda, um índice (hashmap) de id para gnode_t*, utilizado
+ * para acelerar buscas externas por id e a própria verificação de pertencimento em
+ * graph_add_edge(). Este índice não é atualizado automaticamente quando novos nós são
+ * adicionados; cabe ao chamador regerá-lo explicitamente quando necessário (ver
+ * graph_generate_node_index() e graph_get_node_index()).
+ *
+ * O algoritmo de Dijkstra é genérico quanto ao peso utilizado: em vez de operar sobre
+ * campos fixos, ele recebe uma função (graph_weight_t) fornecida pelo chamador, que extrai
+ * de uma conexão o valor numérico a ser acumulado e comparado ao longo do caminho. Isso
+ * permite calcular, a partir do mesmo grafo, tanto o caminho de menor distância quanto o
+ * caminho mais rápido, apenas alternando a função de peso utilizada.
  */
 
 typedef struct graph_t graph_t;
@@ -36,12 +46,32 @@ typedef struct dijkstra_connections_t dijkstra_connections_t;
   * @return   O valor numérico associado à conexão, utilizado para determinar qual
   *           caminho acumula o menor valor total (e, portanto, deve ser preferido).
   *
-  * @note     É responsabilidade do chamador extrair, a partir da informação associada
-  *           à conexão (ver edge_get_info()), o valor que deseja minimizar. Isso permite
+  * @note     É responsabilidade do chamador extrair, a partir da informação associada à
+  *           conexão (ver edge_get_info()), o valor que deseja minimizar. Isso permite
   *           reutilizar o mesmo grafo tanto para o caminho de menor distância quanto para
   *           o caminho mais rápido, bastando fornecer funções de peso diferentes.
   */
 typedef double (*graph_weight_t)(edge_t *edge);
+
+/** @brief   Função de clonagem de uma informação associada a um nó ou a uma conexão.
+ *
+ * @param   info  Pointer para a informação original a ser clonada.
+ *
+ * @return  Pointer para uma nova cópia independente da informação.
+ *
+ * @note    Fornecida ao grafo em graph_init(). Caso o grafo não assuma ownership sobre a
+ *          informação correspondente, pode ser @c NULL.
+ */
+typedef void *(*graph_info_clone_t)(const void *info);
+
+/** @brief   Função de destruição de uma informação associada a um nó ou a uma conexão.
+ *
+ * @param   info  Pointer para a informação a ser destruída.
+ *
+ * @note    Fornecida ao grafo em graph_init(). Caso o grafo não assuma ownership sobre a
+ *          informação correspondente, pode ser @c NULL.
+ */
+typedef void (*graph_info_destroy_t)(void *info);
 
 /** @brief   Inicializa um nó do grafo.
  *
@@ -79,13 +109,14 @@ void *gnode_get_info(gnode_t *gnode);
  */
 vector_t *gnode_get_connections(gnode_t *gnode);
 
-/** @brief   Destrói um nó e libera toda a memória associada a ele, incluindo suas conexões.
+/** @brief   Destrói um nó e libera a memória de sua estrutura, incluindo as conexões de
+ *           saída (mas não a informação associada ao nó nem às conexões).
  *
  * @param   gnode  Pointer para o nó a ser destruído.
  *
  * @warning O dado apontado por @p gnode e os dados apontados pelas conexões de saída deste
- *          nó não são liberados. O chamador é responsável por desalocar esses dados antes
- *          de invocar esta função.
+ *          nó não são liberados por esta função; caso o nó esteja inserido em um grafo
+ *          owning, prefira destruí-lo por meio de graph_destroy().
  * @warning O nó não deve ser destruído enquanto ainda estiver inserido em um grafo.
  */
 void gnode_destroy(gnode_t *gnode);
@@ -116,10 +147,28 @@ void *edge_get_info(edge_t *edge);
 
 /** @brief   Inicializa um grafo dirigido vazio.
  *
+ * @param   node_clone    Função utilizada para clonar a informação associada a nós em
+ *                         graph_clone() e graph_to_undirected(). Pode ser @c NULL caso o
+ *                         grafo não precise suportar clonagem de nós.
+ * @param   node_destroy  Função utilizada para liberar a informação associada a nós em
+ *                         graph_destroy(). Pode ser @c NULL caso o grafo não assuma
+ *                         ownership sobre a informação dos nós.
+ * @param   edge_clone    Função utilizada para clonar a informação associada a conexões em
+ *                         graph_clone() e graph_to_undirected(). Pode ser @c NULL caso o
+ *                         grafo não precise suportar clonagem de conexões.
+ * @param   edge_destroy  Função utilizada para liberar a informação associada a conexões
+ *                         em graph_destroy(). Pode ser @c NULL caso o grafo não assuma
+ *                         ownership sobre a informação das conexões.
+ *
  * @return  Uma instância de graph_t pronta para uso.
  * @warning Em caso de erro na alocação de memória, o programa será encerrado.
+ * @warning Caso uma função de destruição seja fornecida sem a correspondente função de
+ *          clonagem, graph_clone() e graph_to_undirected() recusarão operar sobre o grafo
+ *          resultante (retornando @c NULL), para evitar liberação dupla da mesma
+ *          informação por dois grafos distintos.
  */
-graph_t *graph_init();
+graph_t *graph_init(graph_info_clone_t node_clone, graph_info_destroy_t node_destroy,
+                     graph_info_clone_t edge_clone, graph_info_destroy_t edge_destroy);
 
 /** @brief   Obtém o vetor de nós do grafo.
  *
@@ -135,8 +184,9 @@ vector_t *graph_get_nodes(graph_t *graph);
  * @param   graph  Pointer para o grafo.
  * @param   node   Pointer para o nó a ser adicionado.
  *
- * @warning O grafo não assume ownership do nó. O chamador é responsável por garantir que
- *          o nó permaneça válido enquanto estiver no grafo.
+ * @note    Esta operação não atualiza o índice de nós eventualmente já gerado (ver
+ *          graph_get_node_index()); regere-o explicitamente após adicionar novos nós, caso
+ *          deseje que buscas subsequentes os encontrem através do índice.
  */
 void graph_add_node(graph_t *graph, gnode_t *node);
 
@@ -152,6 +202,10 @@ void graph_add_node(graph_t *graph, gnode_t *node);
  *          @p src ou @p dst não estejam presentes no grafo.
  * @note    A conexão é dirigida: liga @p src a @p dst, mas não o inverso. Para um grafo
  *          não-dirigido, chame esta função duas vezes invertendo src e dst.
+ * @note    Caso o índice de nós (ver graph_get_node_index()) exista e esteja sincronizado
+ *          com a quantidade atual de nós do grafo, ele é utilizado para verificar o
+ *          pertencimento de @p src e @p dst em tempo constante; caso contrário, é feita uma
+ *          varredura linear sobre todos os nós do grafo.
  */
 edge_t *graph_add_edge(graph_t *graph, gnode_t *src, gnode_t *dst, void *info);
 
@@ -159,28 +213,70 @@ edge_t *graph_add_edge(graph_t *graph, gnode_t *src, gnode_t *dst, void *info);
  *
  * @param   graph  Pointer para o grafo dirigido de origem.
  *
- * @return  Pointer para um novo grafo não-dirigido, onde para cada conexão dirigida do
- *          grafo original, a conexão reversa também está presente. O grafo retornado é
- *          independente do original e deve ser destruído pelo chamador.
+ * @return  Pointer para um novo grafo não-dirigido, com as mesmas funções de clonagem e
+ *          destruição do grafo original, onde para cada conexão dirigida do grafo original
+ *          a conexão reversa também está presente. Retorna @c NULL caso o grafo possua
+ *          ownership sobre a informação das conexões sem a correspondente função de
+ *          clonagem (ver graph_init()), já que duplicar a conexão reversa exigiria
+ *          compartilhar a mesma informação entre duas conexões destruídas
+ *          independentemente. O grafo retornado é independente do original e deve ser
+ *          destruído pelo chamador.
  *
  * @note    A conversão é feita em três etapas: clonagem dos nós, cópia das conexões com
  *          remapeamento dos ponteiros de destino, e inserção das conexões reversas
  *          ausentes. Conexões já mútuas no grafo original não são duplicadas.
- *
- * @warning Os dados associados a nós e conexões são copiados de forma superficial: o grafo
- *          resultante compartilha os mesmos ponteiros de informação do grafo original.
  */
 graph_t *graph_to_undirected(graph_t *graph);
 
-/** @brief   Destrói um grafo e libera toda a memória associada a ele.
+/** @brief   Clona um grafo, criando uma cópia profunda independente.
+ *
+ * @param   graph  Pointer para o grafo a ser clonado.
+ *
+ * @return  Pointer para um novo grafo, com os mesmos nós e conexões do original, onde a
+ *          informação de cada nó e de cada conexão foi duplicada por meio das funções de
+ *          clonagem fornecidas em graph_init(). Caso uma das funções de clonagem não tenha
+ *          sido fornecida enquanto a correspondente função de destruição foi, retorna
+ *          @c NULL (ver graph_init()). O grafo retornado é independente do original e deve
+ *          ser destruído pelo chamador.
+ */
+graph_t *graph_clone(graph_t *graph);
+
+/** @brief   Destrói um grafo, liberando toda a memória de sua estrutura interna.
  *
  * @param   graph  Pointer para o grafo a ser destruído.
  *
- * @warning Os nós, suas conexões e os dados associados a eles não são destruídos. O
- *          chamador é responsável por destruir cada gnode_t individualmente após esta
- *          chamada.
+ * @note    Caso o grafo tenha sido inicializado com funções de destruição (ver
+ *          graph_init()), a informação associada a cada nó e a cada conexão também é
+ *          liberada por meio dessas funções. Caso contrário, nenhuma informação é liberada
+ *          e o chamador permanece responsável por ela.
  */
 void graph_destroy(graph_t *graph);
+
+/** @brief   Gera (ou regenera) o índice de busca de nós por id, descartando o índice
+ *           anterior, caso exista.
+ *
+ * @param   graph  Pointer para o grafo.
+ *
+ * @return  Pointer para o índice (hashmap_t) gerado, contendo todos os nós atualmente
+ *          presentes no grafo, mapeados por id. O índice é de propriedade do grafo e não
+ *          deve ser destruído pelo chamador.
+ * @note    Chame esta função explicitamente após adicionar novos nós ao grafo, caso deseje
+ *          que o índice reflita essa mudança; graph_get_node_index() não regera o índice
+ *          automaticamente.
+ */
+hashmap_t *graph_generate_node_index(graph_t *graph);
+
+/** @brief   Obtém o índice de busca de nós por id, gerando-o caso ainda não exista.
+ *
+ * @param   graph  Pointer para o grafo.
+ *
+ * @return  Pointer para o índice (hashmap_t) atualmente associado ao grafo. O índice é de
+ *          propriedade do grafo e não deve ser destruído pelo chamador.
+ * @warning Caso nós tenham sido adicionados ao grafo após a última geração do índice, eles
+ *          não estarão presentes no índice retornado; utilize graph_generate_node_index()
+ *          para refleti-los.
+ */
+hashmap_t *graph_get_node_index(graph_t *graph);
 
 /** @brief   Executa o algoritmo de Dijkstra entre dois nós do grafo.
  *

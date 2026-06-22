@@ -11,6 +11,12 @@
 
 struct graph_t {
   vector_t *nodes;
+  hashmap_t *node_index;
+  size_t node_index_count;
+  graph_info_clone_t node_clone;
+  graph_info_destroy_t node_destroy;
+  graph_info_clone_t edge_clone;
+  graph_info_destroy_t edge_destroy;
 };
 
 struct gnode_t {
@@ -83,7 +89,8 @@ void *edge_get_info(edge_t *edge) {
   return edge->info;
 }
 
-graph_t *graph_init() {
+graph_t *graph_init(graph_info_clone_t node_clone, graph_info_destroy_t node_destroy,
+                     graph_info_clone_t edge_clone, graph_info_destroy_t edge_destroy) {
   graph_t *graph = malloc(sizeof(graph_t));
   if (graph == NULL) {
     printf("Erro na alocação de memória.\n");
@@ -91,6 +98,12 @@ graph_t *graph_init() {
   }
 
   graph->nodes = vec_init(sizeof(gnode_t *));
+  graph->node_index = NULL;
+  graph->node_index_count = 0;
+  graph->node_clone = node_clone;
+  graph->node_destroy = node_destroy;
+  graph->edge_clone = edge_clone;
+  graph->edge_destroy = edge_destroy;
 
   return graph;
 }
@@ -103,19 +116,27 @@ void graph_add_node(graph_t *graph, gnode_t *node) {
   vec_push_back(graph->nodes, &node);
 }
 
-edge_t *graph_add_edge(graph_t *graph, gnode_t *src, gnode_t *dst, void *info) {
-  size_t size = vec_get_size(graph->nodes);
+static bool node_index_is_fresh(graph_t *graph) {
+  return graph->node_index != NULL && graph->node_index_count == vec_get_size(graph->nodes);
+}
 
+edge_t *graph_add_edge(graph_t *graph, gnode_t *src, gnode_t *dst, void *info) {
   bool src_exists_in_graph = false;
   bool dst_exists_in_graph = false;
 
-  for (size_t i = 0; i < size; i++) {
-    gnode_t *node = *(gnode_t **) vec_at(graph->nodes, i);
+  if (node_index_is_fresh(graph)) {
+    src_exists_in_graph = (hm_get(graph->node_index, src->id) == src);
+    dst_exists_in_graph = (hm_get(graph->node_index, dst->id) == dst);
+  } else {
+    size_t size = vec_get_size(graph->nodes);
+    for (size_t i = 0; i < size; i++) {
+      gnode_t *node = *(gnode_t **) vec_at(graph->nodes, i);
 
-    if (node == src) src_exists_in_graph = true;
-    if (node == dst) dst_exists_in_graph = true;
+      if (node == src) src_exists_in_graph = true;
+      if (node == dst) dst_exists_in_graph = true;
 
-    if (src_exists_in_graph && dst_exists_in_graph) break;
+      if (src_exists_in_graph && dst_exists_in_graph) break;
+    }
   }
 
   if (!src_exists_in_graph || !dst_exists_in_graph) {
@@ -139,14 +160,21 @@ edge_t *graph_add_edge(graph_t *graph, gnode_t *src, gnode_t *dst, void *info) {
 }
 
 graph_t *graph_to_undirected(graph_t *graph) {
-  graph_t *undirected = graph_init();
+  if (graph->edge_destroy != NULL && graph->edge_clone == NULL) {
+    printf("Não é possível converter o grafo: ownership de conexões sem função de clonagem.\n");
+    return NULL;
+  }
+
+  graph_t *undirected = graph_init(graph->node_clone, graph->node_destroy, graph->edge_clone, graph->edge_destroy);
 
   size_t nodes_size = vec_get_size(graph->nodes);
-  hashmap_t *hm = hm_init(nodes_size * 2);
+  hashmap_t *hm = hm_init(nodes_size > 0 ? nodes_size * 2 : 1);
 
   for (size_t i = 0; i < nodes_size; i++) {
     gnode_t *ori = *(gnode_t **) vec_at(graph->nodes, i);
-    gnode_t *cln = gnode_init(ori->id, ori->info);
+    void *cln_info = graph->node_clone ? graph->node_clone(ori->info) : ori->info;
+    gnode_t *cln = gnode_init(ori->id, cln_info);
+
     graph_add_node(undirected, cln);
     hm_set(hm, ori->id, cln, NULL);
   }
@@ -160,7 +188,8 @@ graph_t *graph_to_undirected(graph_t *graph) {
       edge_t *ori_edge = *(edge_t **) vec_at(ori->connections, j);
       gnode_t *new_dst = hm_get(hm, ori_edge->dst->id);
 
-      graph_add_edge(undirected, cln, new_dst, ori_edge->info);
+      void *cln_edge_info = graph->edge_clone ? graph->edge_clone(ori_edge->info) : ori_edge->info;
+      graph_add_edge(undirected, cln, new_dst, cln_edge_info);
     }
   }
 
@@ -185,7 +214,8 @@ graph_t *graph_to_undirected(graph_t *graph) {
 
       if (has_reverse) continue;
 
-      graph_add_edge(undirected, dst, src, edge->info);
+      void *rev_info = graph->edge_clone ? graph->edge_clone(edge->info) : edge->info;
+      graph_add_edge(undirected, dst, src, rev_info);
     }
   }
 
@@ -193,14 +223,90 @@ graph_t *graph_to_undirected(graph_t *graph) {
   return undirected;
 }
 
+graph_t *graph_clone(graph_t *graph) {
+  if (graph->node_destroy != NULL && graph->node_clone == NULL) {
+    printf("Não é possível clonar o grafo: ownership de nós sem função de clonagem.\n");
+    return NULL;
+  }
+
+  if (graph->edge_destroy != NULL && graph->edge_clone == NULL) {
+    printf("Não é possível clonar o grafo: ownership de conexões sem função de clonagem.\n");
+    return NULL;
+  }
+
+  graph_t *clone = graph_init(graph->node_clone, graph->node_destroy, graph->edge_clone, graph->edge_destroy);
+
+  size_t nodes_size = vec_get_size(graph->nodes);
+  hashmap_t *id_map = hm_init(nodes_size > 0 ? nodes_size * 2 : 1);
+
+  for (size_t i = 0; i < nodes_size; i++) {
+    gnode_t *ori = *(gnode_t **) vec_at(graph->nodes, i);
+    void *cln_info = graph->node_clone ? graph->node_clone(ori->info) : ori->info;
+    gnode_t *cln = gnode_init(ori->id, cln_info);
+
+    graph_add_node(clone, cln);
+    hm_set(id_map, ori->id, cln, NULL);
+  }
+
+  for (size_t i = 0; i < nodes_size; i++) {
+    gnode_t *ori = *(gnode_t **) vec_at(graph->nodes, i);
+    gnode_t *cln_src = hm_get(id_map, ori->id);
+
+    size_t conn_size = vec_get_size(ori->connections);
+    for (size_t j = 0; j < conn_size; j++) {
+      edge_t *ori_edge = *(edge_t **) vec_at(ori->connections, j);
+      gnode_t *cln_dst = hm_get(id_map, ori_edge->dst->id);
+
+      void *cln_edge_info = graph->edge_clone ? graph->edge_clone(ori_edge->info) : ori_edge->info;
+      graph_add_edge(clone, cln_src, cln_dst, cln_edge_info);
+    }
+  }
+
+  hm_destroy(id_map);
+  return clone;
+}
+
 void graph_destroy(graph_t *graph) {
   size_t size = vec_get_size(graph->nodes);
   for (size_t i = 0; i < size; i++) {
-    gnode_destroy(*(gnode_t **) vec_at(graph->nodes, i));
+    gnode_t *node = *(gnode_t **) vec_at(graph->nodes, i);
+
+    size_t conn_size = vec_get_size(node->connections);
+    for (size_t j = 0; j < conn_size; j++) {
+      edge_t *edge = *(edge_t **) vec_at(node->connections, j);
+      if (graph->edge_destroy != NULL) graph->edge_destroy(edge->info);
+    }
+
+    if (graph->node_destroy != NULL) graph->node_destroy(node->info);
+
+    gnode_destroy(node);
   }
+
+  if (graph->node_index != NULL) hm_destroy(graph->node_index);
 
   vec_destroy(graph->nodes);
   free(graph);
+}
+
+hashmap_t *graph_generate_node_index(graph_t *graph) {
+  if (graph->node_index != NULL) hm_destroy(graph->node_index);
+
+  size_t nodes_size = vec_get_size(graph->nodes);
+  graph->node_index = hm_init(nodes_size > 0 ? nodes_size * 2 : 1);
+  graph->node_index_count = nodes_size;
+
+  for (size_t i = 0; i < nodes_size; i++) {
+    gnode_t *node = *(gnode_t **) vec_at(graph->nodes, i);
+    hm_set(graph->node_index, node->id, node, NULL);
+  }
+
+  return graph->node_index;
+}
+
+hashmap_t *graph_get_node_index(graph_t *graph) {
+  if (graph->node_index == NULL) return graph_generate_node_index(graph);
+
+  return graph->node_index;
 }
 
 static void swap(vector_t *v, size_t i, size_t j) {
