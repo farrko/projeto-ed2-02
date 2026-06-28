@@ -90,7 +90,6 @@ point_t *line_get_p2(line_t *line) {
   return line->p2;
 }
 
-
 double line_get_x1(line_t *line) {
   return point_get_x(line->p1);
 }

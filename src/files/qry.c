@@ -76,25 +76,36 @@ static void command_o(int reg, const char *cep, char face, int num, hashmap_t *b
   sprintf(buf, "R%d", reg);
   text_t *t = text_init(0, pos_x + 10, 10, "start", "#880808", "#000000", "sans-serif", "normal", "8px", buf);
 
-  vec_push_back(added_elements, shape_init(LINE, lx));
-  vec_push_back(added_elements, shape_init(LINE, ly));
-  vec_push_back(added_elements, shape_init(TEXT, t));
+  shape_t *shape_lx = shape_init(LINE, lx);
+  shape_t *shape_ly = shape_init(LINE, ly);
+  shape_t *shape_t_ = shape_init(TEXT, t);
+
+  vec_push_back(added_elements, &shape_lx);
+  vec_push_back(added_elements, &shape_ly);
+  vec_push_back(added_elements, &shape_t_);
 }
 
 static void command_mvm(double v, double x, double y, double w, double h, graph_t *graph, FILE *txt) {
   fprintf(txt, "\n\n--- COMANDO MVM --- argumentos: %.2f, %.2f, %.2f, %.2f, %.2f ---\n\n", v, x, y, w, h);
+  (void) graph;
 }
 
 static void command_regs(double vl, graph_t *graph, FILE *txt, vector_t *added_elements) {
   fprintf(txt, "\n\n--- COMANDO REGS --- argumentos: %.2f ---\n\n", vl);
+  (void) graph;
+  (void) added_elements;
 }
 
 static void command_exp(double vl, graph_t *graph, FILE *txt, vector_t *added_elements) {
   fprintf(txt, "\n\n--- COMANDO EXP --- argumentos: %.2f ---\n\n", vl);
+  (void) graph;
+  (void) added_elements;
 }
 
 static void command_p(int reg1, int reg2, const char *cc, const char *cr, graph_t *graph, FILE *txt, vector_t *added_elements) {
   fprintf(txt, "\n\n--- COMANDO EXP --- argumentos: R%d, R%d, %s, %s ---\n\n", reg1, reg2, cc, cr);
+  (void) graph;
+  (void) added_elements;
 }
 
 void qry_processing(const char *qrypath, const char *txtpath, svg_t *svg, graph_t *graph, vector_t *blocks) {
@@ -112,7 +123,7 @@ void qry_processing(const char *qrypath, const char *txtpath, svg_t *svg, graph_
   }
 
   registers_t *registers = registers_init();
-  vector_t *added_elements = vec_init(sizeof(shape_t *));
+  vector_t *added_elements = vec_init(sizeof(shape_t **));
   hashmap_t *blocks_hm = block_vec_to_hm(blocks);
 
   char buf[256];
@@ -168,7 +179,7 @@ void qry_processing(const char *qrypath, const char *txtpath, svg_t *svg, graph_
 
   svg_write_vector_shape(svg, added_elements);
   size_t n = vec_get_size(added_elements);
-  for (size_t i = 0; i < n; i++) shape_destroy(vec_at(added_elements, i));
+  for (size_t i = 0; i < n; i++) shape_destroy(*(shape_t **) vec_at(added_elements, i));
   vec_destroy(added_elements);
 
   registers_destroy(registers);

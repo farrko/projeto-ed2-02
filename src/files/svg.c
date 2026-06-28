@@ -85,7 +85,7 @@ void svg_write_vector_shape(svg_t *svg, vector_t *v) {
   size_t n = vec_get_size(v);
 
   for (size_t i = 0; i < n; i++) {
-    shape_t *s = vec_at(v, i);
+    shape_t *s = *(shape_t **) vec_at(v, i);
 
     switch (shape_get_type(s)) {
       case CIRCLE:
