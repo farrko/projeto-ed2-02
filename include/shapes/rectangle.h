@@ -2,7 +2,9 @@
 #define RECTANGLE_H
 
 #include <stddef.h>
+#include <stdbool.h>
 #include "shapes/point.h"
+#include "shapes/line.h"
 
 /*
  *  RETÂNGULO
@@ -159,5 +161,7 @@ const char *rect_get_border_color(rectangle_t *rect);
   * @return   String com o tamanho da borda.
   */
 const char *rect_get_border_width(rectangle_t *rect);
+
+bool rect_line_overlap(rectangle_t *r, line_t *l);
 
 #endif

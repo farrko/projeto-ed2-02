@@ -94,4 +94,6 @@ const char *street_get_nome(const street_t *street);
  */
 void street_destroy(street_t *street);
 
+void street_set_vm(street_t *street, double vm);
+
 #endif

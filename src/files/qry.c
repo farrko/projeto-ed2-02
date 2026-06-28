@@ -8,6 +8,7 @@
 #include "shapes/point.h"
 #include "shapes/shapes.h"
 #include "objects/street.h"
+#include "shapes/rectangle.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -152,7 +153,35 @@ static void command_o(int reg, const char *cep, char face, int num, hashmap_t *b
 
 static void command_mvm(double v, double x, double y, double w, double h, graph_t *graph, FILE *txt) {
   fprintf(txt, "\n\n--- COMANDO MVM --- argumentos: %.2f, %.2f, %.2f, %.2f, %.2f ---\n\n", v, x, y, w, h);
-  (void) graph;
+
+  rectangle_t *box = rect_init(0, x, y, w, h, "#000000", "#000000", "2px");
+
+  vector_t *graph_vec = graph_get_nodes(graph);
+  size_t graph_n = vec_get_size(graph_vec);
+
+  for (size_t i = 0; i < graph_n; i++) {
+    gnode_t *node = *(gnode_t **) vec_at(graph_vec, i);
+
+    vector_t *conn_vec = gnode_get_connections(node);
+    size_t conn_n = vec_get_size(conn_vec);
+
+    for (size_t j = 0; j < conn_n; j++) {
+      edge_t *edge = *(edge_t **) vec_at(conn_vec, j);
+      gnode_t *src = edge_get_src(edge);
+      gnode_t *dst = edge_get_dst(edge);
+
+      point_t *src_pos = gnode_get_info(src);
+      point_t *dst_pos = gnode_get_info(dst);
+
+      line_t *l = line_init(0, point_get_x(src_pos), point_get_y(src_pos), point_get_x(dst_pos), point_get_y(dst_pos), "#000000", false);
+
+      bool overlap = rect_line_overlap(box, l);
+      if (overlap) street_set_vm(edge_get_info(edge), v);
+      line_destroy(l);
+    }
+  }
+
+  rect_destroy(box);
 }
 
 static void command_regs(double vl, graph_t *graph, FILE *txt, vector_t *added_elements) {
@@ -207,15 +236,27 @@ static void command_p(int reg1, int reg2, const char *cc, const char *cr, regist
     return;
   }
 
-  path_t *shortest_path = path_init(0, "#FA265F");
+  path_t *shortest_path = path_init(0, cc);
   path_add_point(shortest_path, point_get_x(gnode_get_info(dijc_get_from(vec_at(shortest_dijk, 0)))), point_get_y(gnode_get_info(dijc_get_from(vec_at(shortest_dijk, 0)))));
+  fprintf(txt, " - CAMINHO MAIS CURTO\n");
+  fprintf(txt, "  0. Ponto (%.2f, %.2f) - Origem\n", point_get_x(gnode_get_info(dijc_get_from(vec_at(shortest_dijk, 0)))), point_get_y(gnode_get_info(dijc_get_from(vec_at(shortest_dijk, 0)))));
   for (size_t i = 0; i < sdn; i++) {
+    int n = i + 1;
+    if (n == sdn) fprintf(txt, "  %d. Ponto (%.2f, %.2f) - Destino\n", n, point_get_x(gnode_get_info(dijc_get_node(vec_at(shortest_dijk, i)))), point_get_y(gnode_get_info(dijc_get_node(vec_at(shortest_dijk, i)))));
+    else fprintf(txt, "  %d. Ponto (%.2f, %.2f)\n", n, point_get_x(gnode_get_info(dijc_get_node(vec_at(shortest_dijk, i)))), point_get_y(gnode_get_info(dijc_get_node(vec_at(shortest_dijk, i)))));
+
     path_add_point(shortest_path, point_get_x(gnode_get_info(dijc_get_node(vec_at(shortest_dijk, i)))), point_get_y(gnode_get_info(dijc_get_node(vec_at(shortest_dijk, i)))));
   }
 
-  path_t *fastest_path = path_init(0, "#521243");
+  path_t *fastest_path = path_init(0, cr);
   path_add_point(fastest_path, point_get_x(gnode_get_info(dijc_get_from(vec_at(fastest_dijk, 0)))), point_get_y(gnode_get_info(dijc_get_from(vec_at(fastest_dijk, 0)))));
+  fprintf(txt, " - CAMINHO MAIS RÁPIDO\n");
+  fprintf(txt, "  0. Ponto (%.2f, %.2f) - Origem\n", point_get_x(gnode_get_info(dijc_get_from(vec_at(fastest_dijk, 0)))), point_get_y(gnode_get_info(dijc_get_from(vec_at(fastest_dijk, 0)))));
   for (size_t i = 0; i < fdn; i++) {
+    int n = i + 1;
+    if (n == fdn) fprintf(txt, "  %d. Ponto (%.2f, %.2f) - Destino\n", n, point_get_x(gnode_get_info(dijc_get_node(vec_at(fastest_dijk, i)))), point_get_y(gnode_get_info(dijc_get_node(vec_at(fastest_dijk, i)))));
+    else fprintf(txt, "  %d. Ponto (%.2f, %.2f)\n", n, point_get_x(gnode_get_info(dijc_get_node(vec_at(fastest_dijk, i)))), point_get_y(gnode_get_info(dijc_get_node(vec_at(fastest_dijk, i)))));
+
     path_add_point(fastest_path, point_get_x(gnode_get_info(dijc_get_node(vec_at(fastest_dijk, i)))), point_get_y(gnode_get_info(dijc_get_node(vec_at(fastest_dijk, i)))));
   }
 
