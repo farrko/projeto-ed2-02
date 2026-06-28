@@ -89,8 +89,7 @@ void *edge_get_info(edge_t *edge) {
   return edge->info;
 }
 
-graph_t *graph_init(graph_info_clone_t node_clone, graph_info_destroy_t node_destroy,
-                     graph_info_clone_t edge_clone, graph_info_destroy_t edge_destroy) {
+graph_t *graph_init(graph_info_clone_t node_clone, graph_info_destroy_t node_destroy, graph_info_clone_t edge_clone, graph_info_destroy_t edge_destroy) {
   graph_t *graph = malloc(sizeof(graph_t));
   if (graph == NULL) {
     printf("Erro na alocação de memória.\n");

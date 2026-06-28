@@ -164,4 +164,8 @@ polar_coords_t *polar_from_cartesian(point_t *origin, point_t *final);
   */
 point_t *cartesian_from_polar(polar_coords_t *polar);
 
+double point_calculate_distance_squared(point_t *p1, point_t *p2);
+
+point_t *point_clone(point_t *point);
+
 #endif

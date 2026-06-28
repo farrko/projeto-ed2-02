@@ -7,7 +7,7 @@
 #include "rectangle.h"
 #include "text.h"
 #include "line.h"
-#include "datast/linkedlist.h"
+#include "path.h"
 
 /*
  *  SHAPE
@@ -27,7 +27,8 @@ typedef enum {
   CIRCLE,
   RECTANGLE,
   TEXT,
-  LINE
+  LINE,
+  PATH
 } E_SHAPETYPE;
 
 /** @brief    Inicialização de um shape.
@@ -85,12 +86,6 @@ text_t *shape_as_text(shape_t *shape);
   */
 line_t *shape_as_line(shape_t *shape);
 
-/** @brief    Inicializa um node com um shape associado.
-  *
-  * @param    shape   Uma instância de shape.
-  *
-  * @return   Uma instância de node.
-  */
-node_t *shape_as_node(shape_t *shape);
+path_t *shape_as_path(shape_t *shape);
 
 #endif

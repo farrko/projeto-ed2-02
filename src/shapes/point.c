@@ -130,3 +130,13 @@ polar_coords_t *polar_from_cartesian(point_t *origin, point_t *final) {
 point_t *cartesian_from_polar(polar_coords_t *polar) {
   return point_init(polar_get_absolute_x(polar), polar_get_absolute_y(polar));
 }
+
+double point_calculate_distance_squared(point_t *p1, point_t *p2) {
+  double dx = p2->x - p1->x;
+  double dy = p2->y - p1->y;
+  return (dx * dx) + (dy * dy);
+}
+
+point_t *point_clone(point_t *point) {
+  return point_init(point->x, point->y);
+}

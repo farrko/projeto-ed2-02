@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "shapes/line.h"
+#include "shapes/point.h"
 
 struct line_t {
   size_t id;
@@ -112,4 +113,31 @@ char *line_get_color(line_t *line) {
 
 bool line_get_dotted(line_t *line) {
   return line->dotted;
+}
+
+bool line_within_proximity_to_point(line_t *line, point_t *point, double alpha) {
+  double ax = point_get_x(line->p1);
+  double ay = point_get_y(line->p1);
+  double bx = point_get_x(line->p2);
+  double by = point_get_y(line->p2);
+  double px = point_get_x(point);
+  double py = point_get_y(point);
+
+  double vx = bx - ax;
+  double vy = by - ay;
+  double wx = px - ax;
+  double wy = py - ay;
+
+  double l2 = vx * vx + vy * vy;
+  if (l2 == 0.0) return point_calculate_distance_squared(point, line->p1) < (alpha * alpha);
+
+  double t = (wx * vx + wy * vy) / l2;
+  if (t < 0.0) t = 0.0;
+  else if (t > 1.0) t = 1.0;
+
+  point_t *near_p = point_init(ax + t * vx, ay + t * vy);
+  double d = point_calculate_distance_squared(point, near_p);
+  point_destroy(near_p);
+
+  return d < (alpha * alpha);
 }

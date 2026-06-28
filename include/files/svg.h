@@ -6,6 +6,7 @@
 #include "shapes/text.h"
 #include "shapes/line.h"
 #include "datast/vector.h"
+#include "shapes/path.h"
 
 /*
  *  SVG
@@ -69,6 +70,17 @@ void svg_write_text(svg_t *svg, text_t *text);
   * @param    line      A forma de linha a ser escrita.
   */
 void svg_write_line(svg_t *svg, line_t *line);
+
+/** @brief    Escreve um caminho animado no arquivo SVG.
+  *
+  * @param    svg     Uma instância de svg.
+  * @param    path    A forma de caminho a ser escrita.
+  *
+  * @note     O caminho é escrito como um elemento <path> com atributo "d" construído a
+  *           partir da sequência de pontos, animado por meio de stroke-dasharray e
+  *           stroke-dashoffset para simular o efeito de desenho progressivo.
+  */
+void svg_write_path(svg_t *svg, path_t *path);
 
 /** @brief    Escreve todas as quadras de um vetor no arquivo SVG, cada uma como um
   *           retângulo.

@@ -149,4 +149,6 @@ char *line_get_color(line_t *line);
   */
 bool line_get_dotted(line_t *line);
 
+bool line_within_proximity_to_point(line_t *line, point_t *point, double alpha);
+
 #endif

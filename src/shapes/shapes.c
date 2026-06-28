@@ -37,6 +37,9 @@ void shape_destroy(void *shape) {
     case LINE:
       line_destroy(s->shape);
       break;
+    case PATH:
+      path_destroy(s->shape);
+      break;
   }
 
   free(shape);
@@ -62,6 +65,6 @@ line_t *shape_as_line(shape_t *shape) {
   return (line_t *) shape->shape;
 }
 
-node_t *shape_as_node(shape_t *shape) {
-  return node_init(shape, shape_destroy);
+path_t *shape_as_path(shape_t *shape) {
+  return (path_t *) shape->shape;
 }

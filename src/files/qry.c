@@ -1,11 +1,15 @@
 #include "files/qry.h"
+#include "datast/graphs.h"
 #include "datast/vector.h"
 #include "files/svg.h"
 #include "objects/block.h"
 #include "objects/registers.h"
+#include "shapes/line.h"
 #include "shapes/point.h"
 #include "shapes/shapes.h"
+#include "objects/street.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -55,6 +59,67 @@ static point_t *calc_address_pos(char face, int number, block_t *block) {
   return point_init(x, y);
 }
 
+static gnode_t *graph_add_intermediary_node(graph_t *graph, point_t *point, const char *key) {
+  vector_t *graph_vec = graph_get_nodes(graph);
+  size_t graph_n = vec_get_size(graph_vec);
+
+  for (size_t i = 0; i < graph_n; i++) {
+    gnode_t *node = *(gnode_t **) vec_at(graph_vec, i);
+
+    vector_t *conn_vec = gnode_get_connections(node);
+    size_t conn_n = vec_get_size(conn_vec);
+
+    for (size_t j = 0; j < conn_n; j++) {
+      edge_t *edge = *(edge_t **) vec_at(conn_vec, j);
+      gnode_t *src = edge_get_src(edge);
+      gnode_t *dst = edge_get_dst(edge);
+
+      point_t *src_pos = gnode_get_info(src);
+      point_t *dst_pos = gnode_get_info(dst);
+
+      if (point_get_x(src_pos) == point_get_x(point) && point_get_y(src_pos) == point_get_y(point)) continue;
+      if (point_get_x(dst_pos) == point_get_x(point) && point_get_y(dst_pos) == point_get_y(point)) continue;
+
+      line_t *l = line_init(0, point_get_x(src_pos), point_get_y(src_pos), point_get_x(dst_pos), point_get_y(dst_pos), "#000000", false);
+      bool proximity = line_within_proximity_to_point(l, point, 10.0);
+      line_destroy(l);
+      if (!proximity) continue;
+
+      gnode_t *newly_added = gnode_init(key, point_clone(point));
+      graph_add_node(graph, newly_added);
+
+      street_t *edge_street = edge_get_info(edge);
+      double distance_to_src = sqrt(point_calculate_distance_squared(point, gnode_get_info(src)));
+      double distance_to_dst = sqrt(point_calculate_distance_squared(point, gnode_get_info(dst)));
+
+      street_t *to_src = street_init(street_get_ldir(edge_street), street_get_lesq(edge_street), distance_to_src, street_get_vm(edge_street), street_get_nome(edge_street));
+      street_t *from_src = street_clone(to_src);
+      street_t *to_dst = street_init(street_get_ldir(edge_street), street_get_lesq(edge_street), distance_to_dst, street_get_vm(edge_street), street_get_nome(edge_street));
+      street_t *from_dst = street_clone(to_dst);
+
+      graph_add_edge(graph, newly_added, src, to_src);
+      graph_add_edge(graph, src, newly_added, from_src);
+      graph_add_edge(graph, newly_added, dst, to_dst);
+      graph_add_edge(graph, dst, newly_added, from_dst);
+
+      point_destroy(point);
+      return newly_added;
+    }
+  }
+
+  return NULL;
+}
+
+static double fastest_edge(edge_t *edge) {
+  street_t *street = edge_get_info(edge);
+  return street_get_cmp(street) / street_get_vm(street);
+}
+
+static double shortest_edge(edge_t *edge) {
+  street_t *street = edge_get_info(edge);
+  return street_get_cmp(street);
+}
+
 static void command_o(int reg, const char *cep, char face, int num, hashmap_t *blocks_hm, registers_t *registers, FILE *txt, vector_t *added_elements) {
   fprintf(txt, "\n\n--- COMANDO @O? --- argumentos: R%d, %s, %c, %d ---\n\n", reg, cep, face, num);
 
@@ -102,10 +167,68 @@ static void command_exp(double vl, graph_t *graph, FILE *txt, vector_t *added_el
   (void) added_elements;
 }
 
-static void command_p(int reg1, int reg2, const char *cc, const char *cr, graph_t *graph, FILE *txt, vector_t *added_elements) {
-  fprintf(txt, "\n\n--- COMANDO EXP --- argumentos: R%d, R%d, %s, %s ---\n\n", reg1, reg2, cc, cr);
-  (void) graph;
-  (void) added_elements;
+static void command_p(int reg1, int reg2, const char *cc, const char *cr, registers_t *registers, graph_t *graph, FILE *txt, vector_t *added_elements) {
+  fprintf(txt, "\n\n--- COMANDO P? --- argumentos: R%d, R%d, %s, %s ---\n\n", reg1, reg2, cc, cr);
+
+  graph_t *clone = graph_clone(graph);
+
+  gnode_t *start = graph_add_intermediary_node(clone, point_clone(registers_get(registers, reg1)), "dijkstra_start");
+  gnode_t *end = graph_add_intermediary_node(clone, point_clone(registers_get(registers, reg2)), "dijkstra_end");
+  graph_generate_node_index(clone);
+
+  circle_t *sc = circle_init(0, point_get_x(gnode_get_info(start)), point_get_y(gnode_get_info(start)), 10, "##A3CF05", "#A3CF05");
+  text_t *st = text_init(0, point_get_x(gnode_get_info(start)), point_get_y(gnode_get_info(start)), "middle", "#FFFFFF", "#000000", "sans-serif", "normal", "8px", "I");
+  circle_t *ec = circle_init(0, point_get_x(gnode_get_info(end)), point_get_y(gnode_get_info(end)), 10, "#E53A20", "#E53A20");
+  text_t *et = text_init(0, point_get_x(gnode_get_info(end)), point_get_y(gnode_get_info(end)), "middle", "#FFFFFF", "#000000", "sans-serif", "normal", "8px", "F");
+
+  shape_t *shape_sc = shape_init(CIRCLE, sc);
+  shape_t *shape_st = shape_init(TEXT, st);
+  shape_t *shape_ec = shape_init(CIRCLE, ec);
+  shape_t *shape_et = shape_init(TEXT, et);
+
+  vec_push_back(added_elements, &shape_sc);
+  vec_push_back(added_elements, &shape_st);
+  vec_push_back(added_elements, &shape_ec);
+  vec_push_back(added_elements, &shape_et);
+
+  vector_t *shortest_dijk = graph_dijkstra(clone, start, end, shortest_edge);
+  size_t sdn = vec_get_size(shortest_dijk);
+  vector_t *fastest_dijk = graph_dijkstra(clone, start, end, fastest_edge);
+  size_t fdn = vec_get_size(fastest_dijk);
+
+  if (dijc_get_cost(vec_at(shortest_dijk, 0)) == INFINITY) {
+    fprintf(txt, "\t- Distância entre começo e fim infinita: não há conexão entre os dois pontos.\n");
+
+    vec_destroy(shortest_dijk);
+    vec_destroy(fastest_dijk);
+
+    graph_destroy(clone);
+
+    return;
+  }
+
+  path_t *shortest_path = path_init(0, "#FA265F");
+  path_add_point(shortest_path, point_get_x(gnode_get_info(dijc_get_from(vec_at(shortest_dijk, 0)))), point_get_y(gnode_get_info(dijc_get_from(vec_at(shortest_dijk, 0)))));
+  for (size_t i = 0; i < sdn; i++) {
+    path_add_point(shortest_path, point_get_x(gnode_get_info(dijc_get_node(vec_at(shortest_dijk, i)))), point_get_y(gnode_get_info(dijc_get_node(vec_at(shortest_dijk, i)))));
+  }
+
+  path_t *fastest_path = path_init(0, "#521243");
+  path_add_point(fastest_path, point_get_x(gnode_get_info(dijc_get_from(vec_at(fastest_dijk, 0)))), point_get_y(gnode_get_info(dijc_get_from(vec_at(fastest_dijk, 0)))));
+  for (size_t i = 0; i < fdn; i++) {
+    path_add_point(fastest_path, point_get_x(gnode_get_info(dijc_get_node(vec_at(fastest_dijk, i)))), point_get_y(gnode_get_info(dijc_get_node(vec_at(fastest_dijk, i)))));
+  }
+
+  shape_t *shape_sp = shape_init(PATH, shortest_path);
+  shape_t *shape_fp = shape_init(PATH, fastest_path);
+
+  vec_push_back(added_elements, &shape_sp);
+  vec_push_back(added_elements, &shape_fp);
+
+  vec_destroy(shortest_dijk);
+  vec_destroy(fastest_dijk);
+
+  graph_destroy(clone);
 }
 
 void qry_processing(const char *qrypath, const char *txtpath, svg_t *svg, graph_t *graph, vector_t *blocks) {
@@ -171,7 +294,7 @@ void qry_processing(const char *qrypath, const char *txtpath, svg_t *svg, graph_
       char cc[16], cr[16];
 
       sscanf(buf, "%*s R%d R%d %s %s", &reg1, &reg2, cc, cr);
-      command_p(reg1, reg2, cc, cr, graph, txt, added_elements);
+      command_p(reg1, reg2, cc, cr, registers, graph, txt, added_elements);
 
       continue;
     }

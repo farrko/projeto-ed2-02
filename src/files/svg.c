@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #include "files/svg.h"
 #include "objects/block.h"
@@ -69,6 +70,31 @@ void svg_write_line(svg_t *svg, line_t *line) {
   fprintf(svg->svgfile, "<line id=\"%zu\" x1=\"%f\" y1=\"%f\" x2=\"%f\" y2=\"%f\" stroke=\"%s\" stroke-dasharray=\"%s\" />\n", line_get_id(line), line_get_x1(line), line_get_y1(line), line_get_x2(line), line_get_y2(line), line_get_color(line), line_get_dotted(line) ? "10" : "none");
 }
 
+void svg_write_path(svg_t *svg, path_t *path) {
+  if (svg == NULL || path == NULL) return;
+
+  size_t size = path_get_size(path);
+  if (size == 0) return;
+
+  point_t *first = path_get_point(path, 0);
+  double total_length = 0.0;
+
+  fprintf(svg->svgfile, "<path id=\"%zu\" d=\"M %f,%f", path_get_id(path), point_get_x(first), point_get_y(first));
+
+  for (size_t i = 1; i < size; i++) {
+    point_t *prev = path_get_point(path, i - 1);
+    point_t *curr = path_get_point(path, i);
+
+    fprintf(svg->svgfile, " L %f,%f", point_get_x(curr), point_get_y(curr));
+
+    total_length += hypot(point_get_x(curr) - point_get_x(prev), point_get_y(curr) - point_get_y(prev));
+  }
+
+  fprintf(svg->svgfile, "\" fill=\"none\" stroke=\"%s\" stroke-width=\"2\" stroke-dasharray=\"%f\" stroke-dashoffset=\"%f\">\n", path_get_color(path), total_length, total_length);
+  fprintf(svg->svgfile, "<animate attributeName=\"stroke-dashoffset\" from=\"%f\" to=\"0\" dur=\"15s\" fill=\"freeze\" repeatCount=\"indefinite\" />\n", total_length);
+  fprintf(svg->svgfile, "</path>\n");
+}
+
 void svg_write_blocks(svg_t *svg, vector_t *blocks) {
   size_t n_blocks = vec_get_size(blocks);
 
@@ -99,6 +125,9 @@ void svg_write_vector_shape(svg_t *svg, vector_t *v) {
         break;
       case LINE:
         svg_write_line(svg, shape_as_line(s));
+        break;
+      case PATH:
+        svg_write_path(svg, shape_as_path(s));
         break;
     }
   }

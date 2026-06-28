@@ -87,6 +87,7 @@ int main(int argc, char **argv) {
 
     svg_t *qrysvg = svg_init(qrysvg_path);
 
+    svg_write_blocks(qrysvg, blocks);
     qry_processing(full_qrypath, qrytxt_path, qrysvg, graph, blocks);
 
     svg_close(qrysvg);
