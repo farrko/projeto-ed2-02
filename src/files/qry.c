@@ -1,4 +1,5 @@
 #include "files/qry.h"
+#include "datast/vector.h"
 #include "files/svg.h"
 #include "objects/block.h"
 #include "objects/registers.h"
@@ -9,15 +10,21 @@
 #include <stdlib.h>
 #include <string.h>
 
-static block_t *find_block_by_cep(vector_t *blocks, const char *cep) {
-  size_t size = vec_get_size(blocks);
+static hashmap_t *block_vec_to_hm(vector_t *blocks) {
+  size_t n = vec_get_size(blocks);
 
-  for (size_t i = 0; i < size; i++) {
+  hashmap_t *hm = hm_init(n > 0 ? n << 1 : 1);
+
+  for (size_t i = 0; i < n; i++) {
     block_t *block = vec_at(blocks, i);
-    if (strncmp(block_get_cep(block), cep, 15) == 0) return block;
+    hm_set(hm, block_get_cep(block), block, NULL);
   }
 
-  return NULL;
+  return hm;
+}
+
+static block_t *find_block_by_cep(hashmap_t *blocks_hm, const char *cep) {
+  return hm_get(blocks_hm, cep);
 }
 
 static point_t *calc_address_pos(char face, int number, block_t *block) {
@@ -48,10 +55,10 @@ static point_t *calc_address_pos(char face, int number, block_t *block) {
   return point_init(x, y);
 }
 
-static void command_o(int reg, const char *cep, char face, int num, vector_t *blocks, registers_t *registers, FILE *txt, vector_t *added_elements) {
+static void command_o(int reg, const char *cep, char face, int num, hashmap_t *blocks_hm, registers_t *registers, FILE *txt, vector_t *added_elements) {
   fprintf(txt, "\n\n--- COMANDO @O? --- argumentos: R%d, %s, %c, %d ---\n\n", reg, cep, face, num);
 
-  block_t *block = find_block_by_cep(blocks, cep);
+  block_t *block = find_block_by_cep(blocks_hm, cep);
   if (block == NULL) return;
 
   point_t *pos = calc_address_pos(face, num, block);
@@ -106,6 +113,7 @@ void qry_processing(const char *qrypath, const char *txtpath, svg_t *svg, graph_
 
   registers_t *registers = registers_init();
   vector_t *added_elements = vec_init(sizeof(shape_t *));
+  hashmap_t *blocks_hm = block_vec_to_hm(blocks);
 
   char buf[256];
   while (fgets(buf, sizeof(buf), qry)) {
@@ -115,7 +123,7 @@ void qry_processing(const char *qrypath, const char *txtpath, svg_t *svg, graph_
       char face;
 
       sscanf(buf, "%*s R%d %15s %c %d", &reg, cep, &face, &num);
-      command_o(reg, cep, face, num, blocks, registers, txt, added_elements);
+      command_o(reg, cep, face, num, blocks_hm, registers, txt, added_elements);
 
       continue;
     }
@@ -164,6 +172,7 @@ void qry_processing(const char *qrypath, const char *txtpath, svg_t *svg, graph_
   vec_destroy(added_elements);
 
   registers_destroy(registers);
+  hm_destroy(blocks_hm);
 
   fclose(qry);
   fclose(txt);
