@@ -2,26 +2,28 @@
 #define QRY_H
 
 #include "svg.h"
-#include "datast/exhash.h"
+#include "datast/vector.h"
+#include "datast/graphs.h"
 
 /*
  *  PROCESSAMENTO DE CONSULTAS
  *
  * O módulo de consultas (qry) é responsável por processar um arquivo de consultas e produzir
  * os resultados correspondentes em um arquivo de texto e em um arquivo SVG. As consultas
- * operam sobre as tabelas de pessoas, quadras e endereços previamente carregadas, podendo
+ * operam sobre o grafo do sistema viário e o vetor de quadras previamente carregados, podendo
  * gerar saídas textuais e representações visuais das operações realizadas.
  */
 
 /** @brief   Processa um arquivo de consultas, gerando saídas textual e visual.
  *
- * @param   qrypath    Caminho do arquivo de consultas a ser processado.
- * @param   txtpath    Caminho do arquivo de texto para escrita dos resultados.
- * @param   svg        Instância SVG para escrita das representações visuais.
- * @param   people     Tabela de hashing contendo os registros de pessoas.
- * @param   blocks     Tabela de hashing contendo os registros de quadras.
- * @param   addresses  Tabela de hashing contendo os registros de endereços.
+ * @param   qrypath  Caminho do arquivo de consultas a ser processado.
+ * @param   txtpath  Caminho do arquivo de texto para escrita dos resultados.
+ * @param   svg      Instância SVG para escrita das representações visuais.
+ * @param   graph    Grafo do sistema viário, previamente carregado a partir de um arquivo
+ *                   .via.
+ * @param   blocks   Vetor de quadras (block_t), previamente carregado a partir de um arquivo
+ *                   .geo.
  */
-void qry_processing(const char *qrypath, const char *txtpath, svg_t *svg, exhash_t *people, exhash_t *blocks, exhash_t *addresses);
+void qry_processing(const char *qrypath, const char *txtpath, svg_t *svg, graph_t *graph, vector_t *blocks);
 
 #endif
