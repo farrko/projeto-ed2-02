@@ -78,4 +78,11 @@ void svg_write_line(svg_t *svg, line_t *line);
   */
 void svg_write_blocks(svg_t *svg, vector_t *blocks);
 
+/** @brief    Escreve um vetor de shapes inteiro no arquivo SVG.
+  *
+  * @param    svg    Uma instância de svg.
+  * @param    v      Vetor de formas (shape_t) a serem escritas.
+  */
+void svg_write_vector_shape(svg_t *svg, vector_t *v);
+
 #endif

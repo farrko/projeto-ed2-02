@@ -1,9 +1,11 @@
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "files/svg.h"
 #include "objects/block.h"
+#include "shapes/shapes.h"
 
 struct svg_t {
   FILE *svgfile;
@@ -76,5 +78,28 @@ void svg_write_blocks(svg_t *svg, vector_t *blocks) {
     rectangle_t *rect = rect_init(i, block_get_x(b), block_get_y(b), block_get_width(b), block_get_height(b), block_get_color(b), block_get_border_color(b), block_get_border_width(b));
     svg_write_rectangle(svg, rect);
     rect_destroy(rect);
+  }
+}
+
+void svg_write_vector_shape(svg_t *svg, vector_t *v) {
+  size_t n = vec_get_size(v);
+
+  for (size_t i = 0; i < n; i++) {
+    shape_t *s = vec_at(v, i);
+
+    switch (shape_get_type(s)) {
+      case CIRCLE:
+        svg_write_circle(svg, shape_as_circle(s));
+        break;
+      case RECTANGLE:
+        svg_write_rectangle(svg, shape_as_rectangle(s));
+        break;
+      case TEXT:
+        svg_write_text(svg, shape_as_text(s));
+        break;
+      case LINE:
+        svg_write_line(svg, shape_as_line(s));
+        break;
+    }
   }
 }

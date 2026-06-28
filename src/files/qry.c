@@ -74,10 +74,23 @@ static void command_o(int reg, const char *cep, char face, int num, vector_t *bl
   vec_push_back(added_elements, shape_init(TEXT, t));
 }
 
-void qry_processing(const char *qrypath, const char *txtpath, svg_t *svg, graph_t *graph, vector_t *blocks) {
-  (void) svg;
-  (void) graph;
+static void command_mvm(double v, double x, double y, double w, double h, graph_t *graph, FILE *txt) {
+  fprintf(txt, "\n\n--- COMANDO MVM --- argumentos: %.2f, %.2f, %.2f, %.2f, %.2f ---\n\n", v, x, y, w, h);
+}
 
+static void command_regs(double vl, graph_t *graph, FILE *txt, vector_t *added_elements) {
+  fprintf(txt, "\n\n--- COMANDO REGS --- argumentos: %.2f ---\n\n", vl);
+}
+
+static void command_exp(double vl, graph_t *graph, FILE *txt, vector_t *added_elements) {
+  fprintf(txt, "\n\n--- COMANDO EXP --- argumentos: %.2f ---\n\n", vl);
+}
+
+static void command_p(int reg1, int reg2, const char *cc, const char *cr, graph_t *graph, FILE *txt, vector_t *added_elements) {
+  fprintf(txt, "\n\n--- COMANDO EXP --- argumentos: R%d, R%d, %s, %s ---\n\n", reg1, reg2, cc, cr);
+}
+
+void qry_processing(const char *qrypath, const char *txtpath, svg_t *svg, graph_t *graph, vector_t *blocks) {
   FILE *qry = fopen(qrypath, "r");
   if (qry == NULL) {
     printf("Erro na leitura do arquivo .qry.\n");
@@ -106,7 +119,49 @@ void qry_processing(const char *qrypath, const char *txtpath, svg_t *svg, graph_
 
       continue;
     }
+
+    if (!strncmp(buf, "mvm", 3)) {
+      double v, x, y, w, h;
+
+      sscanf(buf, "%*s %lf %lf %lf %lf %lf", &v, &x, &y, &w, &h);
+      command_mvm(v, x, y, w, h, graph, txt);
+
+      continue;
+    }
+
+    if (!strncmp(buf, "regs", 4)) {
+      double vl;
+
+      sscanf(buf, "%*s %lf", &vl);
+      command_regs(vl, graph, txt, added_elements);
+
+      continue;
+    }
+
+    if (!strncmp(buf, "exp", 3)) {
+      double vl;
+
+      sscanf(buf, "%*s %lf", &vl);
+      command_exp(vl, graph, txt, added_elements);
+
+      continue;
+    }
+
+    if (!strncmp(buf, "p?", 2)) {
+      int reg1, reg2;
+      char cc[16], cr[16];
+
+      sscanf(buf, "%*s R%d R%d %s %s", &reg1, &reg2, cc, cr);
+      command_p(reg1, reg2, cc, cr, graph, txt, added_elements);
+
+      continue;
+    }
   }
+
+  svg_write_vector_shape(svg, added_elements);
+  size_t n = vec_get_size(added_elements);
+  for (size_t i = 0; i < n; i++) shape_destroy(vec_at(added_elements, i));
+  vec_destroy(added_elements);
 
   registers_destroy(registers);
 
