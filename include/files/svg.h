@@ -4,7 +4,8 @@
 #include "shapes/circle.h"
 #include "shapes/rectangle.h"
 #include "shapes/text.h"
-#include "datast/exhash.h"
+#include "shapes/line.h"
+#include "datast/vector.h"
 
 /*
  *  SVG
@@ -62,6 +63,19 @@ void svg_write_rectangle(svg_t *svg, rectangle_t *rect);
   */
 void svg_write_text(svg_t *svg, text_t *text);
 
-void svg_write_blocks(svg_t *svg, exhash_t *blocks);
+/** @brief    Escreve uma linha no arquivo SVG.
+  *
+  * @param    svg       Uma instância de svg.
+  * @param    line      A forma de linha a ser escrita.
+  */
+void svg_write_line(svg_t *svg, line_t *line);
+
+/** @brief    Escreve todas as quadras de um vetor no arquivo SVG, cada uma como um
+  *           retângulo.
+  *
+  * @param    svg     Uma instância de svg.
+  * @param    blocks  Vetor de quadras (block_t) a serem escritas.
+  */
+void svg_write_blocks(svg_t *svg, vector_t *blocks);
 
 #endif

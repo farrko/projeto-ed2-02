@@ -34,6 +34,9 @@ void shape_destroy(void *shape) {
     case TEXT:
       text_destroy(s->shape);
       break;
+    case LINE:
+      line_destroy(s->shape);
+      break;
   }
 
   free(shape);
@@ -53,6 +56,10 @@ rectangle_t *shape_as_rectangle(shape_t *shape) {
 
 text_t *shape_as_text(shape_t *shape) {
   return (text_t *) shape->shape;
+}
+
+line_t *shape_as_line(shape_t *shape) {
+  return (line_t *) shape->shape;
 }
 
 node_t *shape_as_node(shape_t *shape) {

@@ -62,17 +62,19 @@ void svg_write_text(svg_t *svg, text_t *text) {
   fprintf(svg->svgfile, "</text>\n");
 }
 
-void svg_write_blocks(svg_t *svg, exhash_t *blocks) {
-  uint16_t n_blocks = exh_entries_amount(blocks);
-  uint8_t *block_list = exh_get_all(blocks);
+void svg_write_line(svg_t *svg, line_t *line) {
+  if (svg == NULL || line == NULL) return;
+  fprintf(svg->svgfile, "<line id=\"%zu\" x1=\"%f\" y1=\"%f\" x2=\"%f\" y2=\"%f\" stroke=\"%s\" stroke-dasharray=\"%s\" />\n", line_get_id(line), line_get_x1(line), line_get_y1(line), line_get_x2(line), line_get_y2(line), line_get_color(line), line_get_dotted(line) ? "10" : "none");
+}
 
-  for (uint16_t i = 0; i < n_blocks; i++) {
-    block_t *b = (block_t *)(block_list + i * block_sizeof());
+void svg_write_blocks(svg_t *svg, vector_t *blocks) {
+  size_t n_blocks = vec_get_size(blocks);
+
+  for (size_t i = 0; i < n_blocks; i++) {
+    block_t *b = vec_at(blocks, i);
 
     rectangle_t *rect = rect_init(i, block_get_x(b), block_get_y(b), block_get_width(b), block_get_height(b), block_get_color(b), block_get_border_color(b), block_get_border_width(b));
     svg_write_rectangle(svg, rect);
     rect_destroy(rect);
   }
-
-  free(block_list);
 }
