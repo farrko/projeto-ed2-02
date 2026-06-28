@@ -2,11 +2,11 @@
 
 #include <stdio.h>
 #include <string.h>
-#include "datast/exhash.h"
 #include "objects/block.h"
 
-void geo_processing(char *geopath, exhash_t *blocks) {
+vector_t *geo_processing(char *geopath) {
   FILE *geo = fopen(geopath, "r");
+  vector_t *blocks = vec_init(block_sizeof());
 
   char border_width[16] = "2px";
   char color[16] = "#0F0F0F";
@@ -21,8 +21,7 @@ void geo_processing(char *geopath, exhash_t *blocks) {
       sscanf(buf, "%*s %s %lf %lf %lf %lf", cep, &x, &y, &width, &height);
 
       block_t *block = block_init(cep, x, y, width, height, color, border_color, border_width);
-      exh_insert(blocks, cep, block);
-
+      vec_push_back(blocks, block);
       block_destroy(block);
     }
 
@@ -32,4 +31,5 @@ void geo_processing(char *geopath, exhash_t *blocks) {
   }
 
   fclose(geo);
+  return blocks;
 }
