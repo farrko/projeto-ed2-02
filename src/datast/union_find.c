@@ -50,3 +50,8 @@ size_t uf_find(ufind_t *uf, size_t p) {
 
   return root;
 }
+
+void uf_destroy(ufind_t *uf) {
+  free(uf->id);
+  free(uf);
+}
