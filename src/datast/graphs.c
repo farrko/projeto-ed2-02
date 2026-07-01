@@ -8,6 +8,7 @@
 #include "datast/hashmap.h"
 #include "datast/vector.h"
 #include "utils.h"
+#include "datast/union_find.h"
 
 struct graph_t {
   vector_t *nodes;
@@ -441,4 +442,71 @@ edge_t *dijc_get_edge(dijkstra_connections_t *dijc) {
 
 double dijc_get_cost(dijkstra_connections_t *dijc) {
   return dijc->cost;
+}
+
+graph_t *graph_kruskal(graph_t *graph, edge_cmp cmp, edge_limiter limiter) {
+  if (graph->node_destroy != NULL && graph->node_clone == NULL) {
+    printf("Não é possível clonar o grafo: ownership de nós sem função de clonagem.\n");
+    return NULL;
+  }
+
+  if (graph->edge_destroy != NULL && graph->edge_clone == NULL) {
+    printf("Não é possível clonar o grafo: ownership de conexões sem função de clonagem.\n");
+    return NULL;
+  }
+
+  graph_t *mst = graph_init(graph->node_clone, graph->node_destroy, graph->edge_clone, graph->edge_destroy);
+
+  size_t nodes_size = vec_get_size(graph->nodes);
+
+  hashmap_t *key_to_cln_map = hm_init(nodes_size > 0 ? (nodes_size << 1) : 1);
+  hashmap_t *key_to_i_map = hm_init(nodes_size > 0 ? (nodes_size << 1) : 1);
+  ufind_t *uf = uf_init(nodes_size);
+  vector_t *all_edges = vec_init(sizeof(edge_t *));
+
+  for (size_t i = 0; i < nodes_size; i++) {
+    size_t *ip = malloc(sizeof(size_t));
+    if (ip == NULL) {
+      printf("Erro na alocação de memória.\n");
+      exit(1);
+    }
+    *ip = i;
+
+    gnode_t *ori = *(gnode_t **) vec_at(graph->nodes, i);
+    void *cln_info = graph->node_clone ? graph->node_clone(ori->info) : ori->info;
+    gnode_t *cln = gnode_init(ori->id, cln_info);
+
+    graph_add_node(mst, cln);
+    hm_set(key_to_cln_map, ori->id, cln, NULL);
+    hm_set(key_to_i_map, ori->id, ip, free);
+
+    size_t conn_size = vec_get_size(ori->connections);
+    for (size_t i = 0; i < conn_size; i++) {
+      edge_t *edge = *(edge_t **) vec_at(ori->connections, i);
+      vec_push_back(all_edges, &edge);
+    }
+  }
+
+  qsort(vec_front(all_edges), vec_get_size(all_edges), sizeof(edge_t *), cmp);
+
+  for (size_t i = 0; i < vec_get_size(all_edges); i++) {
+    edge_t *edge = *(edge_t **) vec_at(all_edges, i);
+    if (limiter(edge)) break;
+
+    size_t src_i = *(size_t *) hm_get(key_to_i_map, edge->src->id);
+    size_t dst_i = *(size_t *) hm_get(key_to_i_map, edge->dst->id);
+
+    if (uf_find(uf, src_i) == uf_find(uf, dst_i)) continue;
+    uf_unite(uf, src_i, dst_i);
+
+    void *cln_edge_info = graph->edge_clone ? graph->edge_clone(edge->info) : edge->info;
+    graph_add_edge(mst, hm_get(key_to_cln_map, edge->src->id), hm_get(key_to_cln_map, edge->dst->id), cln_edge_info);
+  }
+
+  hm_destroy(key_to_cln_map);
+  hm_destroy(key_to_i_map);
+  uf_destroy(uf);
+  vec_destroy(all_edges);
+
+  return mst;
 }

@@ -53,6 +53,9 @@ typedef struct dijkstra_connections_t dijkstra_connections_t;
   */
 typedef double (*graph_weight_t)(edge_t *edge);
 
+typedef int (*edge_cmp)(const void *, const void *);
+typedef bool (*edge_limiter)(const edge_t *);
+
 /** @brief   Função de clonagem de uma informação associada a um nó ou a uma conexão.
  *
  * @param   info  Pointer para a informação original a ser clonada.
@@ -330,5 +333,7 @@ edge_t *dijc_get_edge(dijkstra_connections_t *dijc);
  *          peso (graph_weight_t) utilizada na chamada a graph_dijkstra().
  */
 double dijc_get_cost(dijkstra_connections_t *dijc);
+
+graph_t *graph_kruskal(graph_t *graph, edge_cmp cmp, edge_limiter limiter);
 
 #endif
