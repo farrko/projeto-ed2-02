@@ -53,6 +53,23 @@ typedef struct dijkstra_connections_t dijkstra_connections_t;
   */
 typedef double (*graph_weight_t)(edge_t *edge);
 
+/** @brief   Função de comparação no estilo qsort, utilizada tanto para ordenar conexões
+ *           por peso quanto para compará-las a um valor-limite.
+ *
+ * @param   a  Pointer para o primeiro valor (double) a ser comparado.
+ * @param   b  Pointer para o segundo valor (double) a ser comparado.
+ *
+ * @return  Um valor negativo se o valor apontado por @p a for menor que o valor apontado
+ *          por @p b, zero se forem iguais, e um valor positivo se @p a for maior que @p b,
+ *          seguindo a convenção de comparadores compatíveis com qsort().
+ *
+ * @note    Definida com esta assinatura genérica para permitir reaproveitamento direto por
+ *          qsort() na ordenação de conexões por peso (ver graph_weight_t). Algoritmos que
+ *          precisem apenas comparar o peso de uma conexão a um valor-limite (como
+ *          graph_kruskal() e graph_tarjan()) reaproveitam a mesma função, invocando-a
+ *          diretamente sobre os endereços dos dois valores a comparar (ex.:
+ *          cmp_fn(&peso_da_conexao, &limiter) >= 0 indica que o peso atinge o limiar).
+ */
 typedef int (*edge_cmp_t)(const void *, const void *);
 
 /** @brief   Função de clonagem de uma informação associada a um nó ou a uma conexão.
@@ -365,5 +382,36 @@ double dijc_get_cost(dijkstra_connections_t *dijc);
   *           @p graph, para evitar acesso a memória já liberada.
   */
 graph_t *graph_kruskal(graph_t *graph, edge_cmp_t cmp_fn, graph_weight_t weight_fn, double limiter);
+
+/** @brief   Executa o algoritmo de Tarjan sobre o grafo, identificando todos os
+ *           componentes fortemente conexos (SCCs) em uma única passagem de DFS.
+ *
+ * @param   graph      Pointer para o grafo a ser analisado.
+ * @param   cmp_fn     Função de comparação (ver edge_cmp_t) utilizada para decidir se o
+ *                      peso de cada conexão (ver @p weight_fn) atinge o valor de
+ *                      @p limiter. É invocada diretamente sobre os endereços do peso da
+ *                      conexão e de @p limiter; a conexão é considerada tanto na travessia
+ *                      de Tarjan quanto na composição dos grafos resultantes somente se
+ *                      @p cmp_fn retornar um valor maior ou igual a zero.
+ * @param   weight_fn  Função que extrai, a partir de uma conexão, o valor numérico a ser
+ *                     comparado com @p limiter por meio de @p cmp_fn.
+ * @param   limiter    Valor-limite comparado ao peso de cada conexão por meio de @p cmp_fn.
+ *
+ * @return  Um vector_t de graph_t*, onde cada elemento é um novo grafo independente,
+ *          contendo uma cópia (clonada por meio das funções fornecidas em graph_init() do
+ *          grafo original) dos nós de um componente fortemente conexo, bem como das
+ *          conexões internas a esse componente aprovadas por @p cmp_fn. Retorna @c NULL
+ *          caso o grafo possua ownership sobre a informação de nós ou de conexões sem a
+ *          correspondente função de clonagem (ver graph_init()).
+ * @note    Cada grafo resultante é totalmente independente do original e de propriedade do
+ *          chamador; deve ser destruído com graph_destroy(). O vector_t retornado também
+ *          deve ser destruído com vec_destroy() após a liberação de seus elementos.
+ * @note    Conexões cujo destino pertença a um componente diferente do de origem, mesmo
+ *          que aprovadas por @p cmp_fn, não são incluídas em nenhum dos grafos resultantes,
+ *          já que não fazem parte da estrutura interna de nenhum componente fortemente
+ *          conexo.
+ * @warning Em caso de erro na alocação de memória, o programa será encerrado.
+ */
+vector_t *graph_tarjan(graph_t *graph, edge_cmp_t cmp_fn, graph_weight_t weight_fn, double limiter);
 
 #endif

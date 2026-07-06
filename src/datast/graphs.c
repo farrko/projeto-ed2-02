@@ -508,3 +508,163 @@ graph_t *graph_kruskal(graph_t *graph, edge_cmp_t cmp_fn, graph_weight_t weight_
 
   return mst;
 }
+
+typedef struct {
+  int      *disc;
+  int      *low;
+  bool     *on_stack;
+  gnode_t **stack;
+  int       stack_top;
+  int       timer;
+  int      *scc_id;
+  int       scc_count;
+  hashmap_t *id_to_idx;
+  edge_cmp_t cmp_fn;
+  graph_weight_t weight_fn;
+  double   limiter;
+} tarjan_ctx_t;
+
+static bool edge_passes_limiter(edge_t *edge, edge_cmp_t cmp_fn, graph_weight_t weight_fn, double limiter) {
+  double value = weight_fn(edge);
+  return cmp_fn(&value, &limiter) >= 0;
+}
+
+static void tarjan_visit(tarjan_ctx_t *ctx, gnode_t *node) {
+  size_t idx = *(size_t *) hm_get(ctx->id_to_idx, gnode_get_id(node));
+ 
+  ctx->disc[idx] = ctx->low[idx] = ctx->timer++;
+  ctx->stack[ctx->stack_top++] = node;
+  ctx->on_stack[idx] = true;
+ 
+  vector_t *conns = gnode_get_connections(node);
+  size_t n_conns = vec_get_size(conns);
+ 
+  for (size_t i = 0; i < n_conns; i++) {
+    edge_t *edge = *(edge_t **) vec_at(conns, i);
+    if (!edge_passes_limiter(edge, ctx->cmp_fn, ctx->weight_fn, ctx->limiter)) continue;
+
+    gnode_t *dst = edge_get_dst(edge);
+    size_t dst_idx = *(size_t *) hm_get(ctx->id_to_idx, gnode_get_id(dst));
+ 
+    if (ctx->disc[dst_idx] == -1) {
+      tarjan_visit(ctx, dst);
+      if (ctx->low[dst_idx] < ctx->low[idx]) ctx->low[idx] = ctx->low[dst_idx];
+    } else if (ctx->on_stack[dst_idx]) {
+      if (ctx->disc[dst_idx] < ctx->low[idx]) ctx->low[idx] = ctx->disc[dst_idx];
+    }
+  }
+ 
+  if (ctx->low[idx] == ctx->disc[idx]) {
+    gnode_t *w;
+    do {
+      w = ctx->stack[--(ctx->stack_top)];
+      size_t w_idx = *(size_t *) hm_get(ctx->id_to_idx, gnode_get_id(w));
+      ctx->on_stack[w_idx] = false;
+      ctx->scc_id[w_idx] = ctx->scc_count;
+    } while (w != node);
+    ctx->scc_count++;
+  }
+}
+
+vector_t *graph_tarjan(graph_t *graph, edge_cmp_t cmp_fn, graph_weight_t weight_fn, double limiter) {
+  if (graph->node_destroy != NULL && graph->node_clone == NULL) {
+    printf("Não é possível executar o algoritmo de Tarjan: ownership de nós sem função de clonagem.\n");
+    return NULL;
+  }
+ 
+  if (graph->edge_destroy != NULL && graph->edge_clone == NULL) {
+    printf("Não é possível executar o algoritmo de Tarjan: ownership de conexões sem função de clonagem.\n");
+    return NULL;
+  }
+ 
+  vector_t *nodes = graph->nodes;
+  size_t n = vec_get_size(nodes);
+ 
+  hashmap_t *id_to_idx = hm_init(n > 0 ? n * 2 : 1);
+  for (size_t i = 0; i < n; i++) {
+    gnode_t *node = *(gnode_t **) vec_at(nodes, i);
+    size_t *idx_ptr = malloc(sizeof(size_t));
+    if (idx_ptr == NULL) {
+      printf("Erro na alocação de memória.\n");
+      exit(1);
+    }
+    *idx_ptr = i;
+    hm_set(id_to_idx, gnode_get_id(node), idx_ptr, free);
+  }
+ 
+  int *disc = malloc(n > 0 ? n * sizeof(int) : sizeof(int));
+  int *low = malloc(n > 0 ? n * sizeof(int) : sizeof(int));
+  bool *on_stack = malloc(n > 0 ? n * sizeof(bool) : sizeof(bool));
+  int *scc_id = malloc(n > 0 ? n * sizeof(int) : sizeof(int));
+  gnode_t **stack = malloc(n > 0 ? n * sizeof(gnode_t *) : sizeof(gnode_t *));
+ 
+  if (!disc || !low || !on_stack || !scc_id || !stack) {
+    printf("Erro na alocação de memória.\n");
+    exit(1);
+  }
+ 
+  for (size_t i = 0; i < n; i++) {
+    disc[i] = -1;
+    low[i] = -1;
+    on_stack[i] = false;
+    scc_id[i] = -1;
+  }
+ 
+  tarjan_ctx_t ctx = { disc, low, on_stack, stack, 0, 0, scc_id, 0, id_to_idx, cmp_fn, weight_fn, limiter };
+ 
+  for (size_t i = 0; i < n; i++) {
+    if (disc[i] == -1) {
+      gnode_t *node = *(gnode_t **) vec_at(nodes, i);
+      tarjan_visit(&ctx, node);
+    }
+  }
+ 
+  vector_t *result = vec_init(sizeof(graph_t *));
+  for (int i = 0; i < ctx.scc_count; i++) {
+    graph_t *sub = graph_init(graph->node_clone, graph->node_destroy, graph->edge_clone, graph->edge_destroy);
+    vec_push_back(result, &sub);
+  }
+ 
+  hashmap_t *clone_map = hm_init(n > 0 ? n * 2 : 1);
+  for (size_t i = 0; i < n; i++) {
+    gnode_t *ori = *(gnode_t **) vec_at(nodes, i);
+    void *cln_info = graph->node_clone ? graph->node_clone(ori->info) : ori->info;
+    gnode_t *cln = gnode_init(ori->id, cln_info);
+ 
+    graph_t *sub = *(graph_t **) vec_at(result, (size_t) scc_id[i]);
+    graph_add_node(sub, cln);
+    hm_set(clone_map, ori->id, cln, NULL);
+  }
+ 
+  for (size_t i = 0; i < n; i++) {
+    gnode_t *ori = *(gnode_t **) vec_at(nodes, i);
+    vector_t *conns = gnode_get_connections(ori);
+    size_t n_conns = vec_get_size(conns);
+ 
+    for (size_t j = 0; j < n_conns; j++) {
+      edge_t *edge = *(edge_t **) vec_at(conns, j);
+      if (!edge_passes_limiter(edge, cmp_fn, weight_fn, limiter)) continue;
+
+      gnode_t *dst = edge_get_dst(edge);
+      size_t dst_idx = *(size_t *) hm_get(id_to_idx, gnode_get_id(dst));
+      if (scc_id[i] != scc_id[dst_idx]) continue;
+ 
+      gnode_t *cln_src = hm_get(clone_map, ori->id);
+      gnode_t *cln_dst = hm_get(clone_map, dst->id);
+      void *cln_edge_info = graph->edge_clone ? graph->edge_clone(edge->info) : edge->info;
+ 
+      graph_t *sub = *(graph_t **) vec_at(result, (size_t) scc_id[i]);
+      graph_add_edge(sub, cln_src, cln_dst, cln_edge_info);
+    }
+  }
+ 
+  hm_destroy(clone_map);
+  free(disc);
+  free(low);
+  free(on_stack);
+  free(scc_id);
+  free(stack);
+  hm_destroy(id_to_idx);
+ 
+  return result;
+}
