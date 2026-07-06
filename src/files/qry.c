@@ -11,6 +11,7 @@
 #include "shapes/rectangle.h"
 
 #include <math.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -82,7 +83,7 @@ static gnode_t *graph_add_intermediary_node(graph_t *graph, point_t *point, cons
       if (point_get_x(dst_pos) == point_get_x(point) && point_get_y(dst_pos) == point_get_y(point)) continue;
 
       line_t *l = line_init(0, point_get_x(src_pos), point_get_y(src_pos), point_get_x(dst_pos), point_get_y(dst_pos), "#000000", false);
-      bool proximity = line_within_proximity_to_point(l, point, 10.0);
+      bool proximity = line_within_proximity_to_point(l, point, 15.0);
       line_destroy(l);
       if (!proximity) continue;
 
@@ -119,6 +120,23 @@ static double fastest_edge(edge_t *edge) {
 static double shortest_edge(edge_t *edge) {
   street_t *street = edge_get_info(edge);
   return street_get_cmp(street);
+}
+
+static double pure_speed_edge(edge_t *edge) {
+  street_t *street = edge_get_info(edge);
+  return street_get_vm(street);
+}
+
+static int edge_cmp(const void *e1, const void *e2) {
+  edge_t *edge1 = *(edge_t * const *) e1;
+  edge_t *edge2 = *(edge_t * const *) e2;
+
+  double s1 = shortest_edge(edge1);
+  double s2 = shortest_edge(edge2);
+
+  if (s1 < s2) return -1;
+  if (s1 > s2) return 1;
+  return 0;
 }
 
 static void command_o(int reg, const char *cep, char face, int num, hashmap_t *blocks_hm, registers_t *registers, FILE *txt, vector_t *added_elements) {
@@ -192,8 +210,34 @@ static void command_regs(double vl, graph_t *graph, FILE *txt, vector_t *added_e
 
 static void command_exp(double vl, graph_t *graph, FILE *txt, vector_t *added_elements) {
   fprintf(txt, "\n\n--- COMANDO EXP --- argumentos: %.2f ---\n\n", vl);
-  (void) graph;
-  (void) added_elements;
+
+  graph_t *undirected = graph_to_undirected(graph, true);
+  graph_t *mst = graph_kruskal(undirected, edge_cmp, pure_speed_edge, vl);
+
+  vector_t *nodes = graph_get_nodes(mst);
+  size_t nodes_size = vec_get_size(nodes);
+  for (size_t i = 0; i < nodes_size; i++) {
+    gnode_t *node = *(gnode_t **) vec_at(nodes, i);
+    vector_t *conns = gnode_get_connections(node);
+    size_t conn_size = vec_get_size(conns);
+
+    for (size_t j = 0; j < conn_size; j++) {
+      edge_t *edge = *(edge_t **) vec_at(conns, j);
+      street_t *st = edge_get_info(edge);
+      street_set_vm(st, street_get_vm(st) * 1.5);
+
+      point_t *src_point = gnode_get_info(edge_get_src(edge));
+      point_t *dst_point = gnode_get_info(edge_get_dst(edge));
+
+      line_t *l = line_init(0, point_get_x(src_point), point_get_y(src_point), point_get_x(dst_point), point_get_y(dst_point), "#780606", false);
+      shape_t *s = shape_init(LINE, l);
+
+      vec_push_back(added_elements, &s);
+    }
+  }
+
+  graph_destroy(mst);
+  graph_destroy(undirected);
 }
 
 static void command_p(int reg1, int reg2, const char *cc, const char *cr, registers_t *registers, graph_t *graph, FILE *txt, vector_t *added_elements) {
@@ -241,9 +285,9 @@ static void command_p(int reg1, int reg2, const char *cc, const char *cr, regist
   fprintf(txt, " - CAMINHO MAIS CURTO\n");
   fprintf(txt, "  0. Ponto (%.2f, %.2f) - Origem\n", point_get_x(gnode_get_info(dijc_get_from(vec_at(shortest_dijk, 0)))), point_get_y(gnode_get_info(dijc_get_from(vec_at(shortest_dijk, 0)))));
   for (size_t i = 0; i < sdn; i++) {
-    int n = i + 1;
-    if (n == sdn) fprintf(txt, "  %d. Ponto (%.2f, %.2f) - Destino\n", n, point_get_x(gnode_get_info(dijc_get_node(vec_at(shortest_dijk, i)))), point_get_y(gnode_get_info(dijc_get_node(vec_at(shortest_dijk, i)))));
-    else fprintf(txt, "  %d. Ponto (%.2f, %.2f)\n", n, point_get_x(gnode_get_info(dijc_get_node(vec_at(shortest_dijk, i)))), point_get_y(gnode_get_info(dijc_get_node(vec_at(shortest_dijk, i)))));
+    size_t n = i + 1;
+    if (n == sdn) fprintf(txt, "  %zu. Ponto (%.2f, %.2f) - Destino\n", n, point_get_x(gnode_get_info(dijc_get_node(vec_at(shortest_dijk, i)))), point_get_y(gnode_get_info(dijc_get_node(vec_at(shortest_dijk, i)))));
+    else fprintf(txt, "  %zu. Ponto (%.2f, %.2f)\n", n, point_get_x(gnode_get_info(dijc_get_node(vec_at(shortest_dijk, i)))), point_get_y(gnode_get_info(dijc_get_node(vec_at(shortest_dijk, i)))));
 
     path_add_point(shortest_path, point_get_x(gnode_get_info(dijc_get_node(vec_at(shortest_dijk, i)))), point_get_y(gnode_get_info(dijc_get_node(vec_at(shortest_dijk, i)))));
   }
@@ -253,9 +297,9 @@ static void command_p(int reg1, int reg2, const char *cc, const char *cr, regist
   fprintf(txt, " - CAMINHO MAIS RÁPIDO\n");
   fprintf(txt, "  0. Ponto (%.2f, %.2f) - Origem\n", point_get_x(gnode_get_info(dijc_get_from(vec_at(fastest_dijk, 0)))), point_get_y(gnode_get_info(dijc_get_from(vec_at(fastest_dijk, 0)))));
   for (size_t i = 0; i < fdn; i++) {
-    int n = i + 1;
-    if (n == fdn) fprintf(txt, "  %d. Ponto (%.2f, %.2f) - Destino\n", n, point_get_x(gnode_get_info(dijc_get_node(vec_at(fastest_dijk, i)))), point_get_y(gnode_get_info(dijc_get_node(vec_at(fastest_dijk, i)))));
-    else fprintf(txt, "  %d. Ponto (%.2f, %.2f)\n", n, point_get_x(gnode_get_info(dijc_get_node(vec_at(fastest_dijk, i)))), point_get_y(gnode_get_info(dijc_get_node(vec_at(fastest_dijk, i)))));
+    size_t n = i + 1;
+    if (n == fdn) fprintf(txt, "  %zu. Ponto (%.2f, %.2f) - Destino\n", n, point_get_x(gnode_get_info(dijc_get_node(vec_at(fastest_dijk, i)))), point_get_y(gnode_get_info(dijc_get_node(vec_at(fastest_dijk, i)))));
+    else fprintf(txt, "  %zu. Ponto (%.2f, %.2f)\n", n, point_get_x(gnode_get_info(dijc_get_node(vec_at(fastest_dijk, i)))), point_get_y(gnode_get_info(dijc_get_node(vec_at(fastest_dijk, i)))));
 
     path_add_point(fastest_path, point_get_x(gnode_get_info(dijc_get_node(vec_at(fastest_dijk, i)))), point_get_y(gnode_get_info(dijc_get_node(vec_at(fastest_dijk, i)))));
   }

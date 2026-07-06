@@ -159,13 +159,14 @@ edge_t *graph_add_edge(graph_t *graph, gnode_t *src, gnode_t *dst, void *info) {
   return edge;
 }
 
-graph_t *graph_to_undirected(graph_t *graph) {
+graph_t *graph_to_undirected(graph_t *graph, bool shared_edges) {
   if (graph->edge_destroy != NULL && graph->edge_clone == NULL) {
     printf("Não é possível converter o grafo: ownership de conexões sem função de clonagem.\n");
     return NULL;
   }
 
-  graph_t *undirected = graph_init(graph->node_clone, graph->node_destroy, graph->edge_clone, graph->edge_destroy);
+  graph_info_destroy_t undirected_edge_destroy = shared_edges ? NULL : graph->edge_destroy;
+  graph_t *undirected = graph_init(graph->node_clone, graph->node_destroy, graph->edge_clone, undirected_edge_destroy);
 
   size_t nodes_size = vec_get_size(graph->nodes);
   hashmap_t *hm = hm_init(nodes_size > 0 ? nodes_size * 2 : 1);
@@ -188,7 +189,7 @@ graph_t *graph_to_undirected(graph_t *graph) {
       edge_t *ori_edge = *(edge_t **) vec_at(ori->connections, j);
       gnode_t *new_dst = hm_get(hm, ori_edge->dst->id);
 
-      void *cln_edge_info = graph->edge_clone ? graph->edge_clone(ori_edge->info) : ori_edge->info;
+      void *cln_edge_info = (graph->edge_clone && !shared_edges) ? graph->edge_clone(ori_edge->info) : ori_edge->info;
       graph_add_edge(undirected, cln, new_dst, cln_edge_info);
     }
   }
@@ -205,16 +206,14 @@ graph_t *graph_to_undirected(graph_t *graph) {
       size_t dst_conn_n = vec_get_size(dst->connections);
       for (size_t k = 0; k < dst_conn_n; k++) {
         edge_t *dst_edge = *(edge_t **) vec_at(dst->connections, k);
-
         if (dst_edge->dst != src) continue;
-
         has_reverse = true;
         break;
       }
 
       if (has_reverse) continue;
 
-      void *rev_info = graph->edge_clone ? graph->edge_clone(edge->info) : edge->info;
+      void *rev_info = (graph->edge_clone && !shared_edges) ? graph->edge_clone(edge->info) : edge->info;
       graph_add_edge(undirected, dst, src, rev_info);
     }
   }
@@ -444,7 +443,7 @@ double dijc_get_cost(dijkstra_connections_t *dijc) {
   return dijc->cost;
 }
 
-graph_t *graph_kruskal(graph_t *graph, edge_cmp cmp, edge_limiter limiter) {
+graph_t *graph_kruskal(graph_t *graph, edge_cmp_t cmp_fn, graph_weight_t weight_fn, double limiter) {
   if (graph->node_destroy != NULL && graph->node_clone == NULL) {
     printf("Não é possível clonar o grafo: ownership de nós sem função de clonagem.\n");
     return NULL;
@@ -455,7 +454,7 @@ graph_t *graph_kruskal(graph_t *graph, edge_cmp cmp, edge_limiter limiter) {
     return NULL;
   }
 
-  graph_t *mst = graph_init(graph->node_clone, graph->node_destroy, graph->edge_clone, graph->edge_destroy);
+  graph_t *mst = graph_init(graph->node_clone, graph->node_destroy, graph->edge_clone, NULL);
 
   size_t nodes_size = vec_get_size(graph->nodes);
 
@@ -481,26 +480,25 @@ graph_t *graph_kruskal(graph_t *graph, edge_cmp cmp, edge_limiter limiter) {
     hm_set(key_to_i_map, ori->id, ip, free);
 
     size_t conn_size = vec_get_size(ori->connections);
-    for (size_t i = 0; i < conn_size; i++) {
-      edge_t *edge = *(edge_t **) vec_at(ori->connections, i);
+    for (size_t j = 0; j < conn_size; j++) {
+      edge_t *edge = *(edge_t **) vec_at(ori->connections, j);
       vec_push_back(all_edges, &edge);
     }
   }
 
-  qsort(vec_front(all_edges), vec_get_size(all_edges), sizeof(edge_t *), cmp);
+  qsort(vec_front(all_edges), vec_get_size(all_edges), sizeof(edge_t *), cmp_fn);
 
   for (size_t i = 0; i < vec_get_size(all_edges); i++) {
     edge_t *edge = *(edge_t **) vec_at(all_edges, i);
-    if (limiter(edge)) break;
 
     size_t src_i = *(size_t *) hm_get(key_to_i_map, edge->src->id);
     size_t dst_i = *(size_t *) hm_get(key_to_i_map, edge->dst->id);
 
     if (uf_find(uf, src_i) == uf_find(uf, dst_i)) continue;
     uf_unite(uf, src_i, dst_i);
+    if (weight_fn(edge) >= limiter) continue;
 
-    void *cln_edge_info = graph->edge_clone ? graph->edge_clone(edge->info) : edge->info;
-    graph_add_edge(mst, hm_get(key_to_cln_map, edge->src->id), hm_get(key_to_cln_map, edge->dst->id), cln_edge_info);
+    graph_add_edge(mst, hm_get(key_to_cln_map, edge->src->id), hm_get(key_to_cln_map, edge->dst->id), edge->info);
   }
 
   hm_destroy(key_to_cln_map);

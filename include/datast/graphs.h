@@ -53,8 +53,7 @@ typedef struct dijkstra_connections_t dijkstra_connections_t;
   */
 typedef double (*graph_weight_t)(edge_t *edge);
 
-typedef int (*edge_cmp)(const void *, const void *);
-typedef bool (*edge_limiter)(const edge_t *);
+typedef int (*edge_cmp_t)(const void *, const void *);
 
 /** @brief   Função de clonagem de uma informação associada a um nó ou a uma conexão.
  *
@@ -214,22 +213,28 @@ edge_t *graph_add_edge(graph_t *graph, gnode_t *src, gnode_t *dst, void *info);
 
 /** @brief   Converte um grafo dirigido em um grafo não-dirigido equivalente.
  *
- * @param   graph  Pointer para o grafo dirigido de origem.
+ * @param   graph          Pointer para o grafo dirigido de origem.
+ * @param   shared_edges   Se @c true, a informação associada a cada conexão (incluindo as
+ *                          conexões reversas sintetizadas) não é clonada: o grafo retornado
+ *                          passa a compartilhar os mesmos ponteiros de @p graph. Se
+ *                          @c false, mantém o comportamento original de clonagem profunda.
  *
- * @return  Pointer para um novo grafo não-dirigido, com as mesmas funções de clonagem e
- *          destruição do grafo original, onde para cada conexão dirigida do grafo original
- *          a conexão reversa também está presente. Retorna @c NULL caso o grafo possua
- *          ownership sobre a informação das conexões sem a correspondente função de
- *          clonagem (ver graph_init()), já que duplicar a conexão reversa exigiria
- *          compartilhar a mesma informação entre duas conexões destruídas
- *          independentemente. O grafo retornado é independente do original e deve ser
- *          destruído pelo chamador.
+ * @return  Pointer para um novo grafo não-dirigido, com as mesmas funções de clonagem do
+ *          grafo original, onde para cada conexão dirigida do grafo original a conexão
+ *          reversa também está presente. Retorna @c NULL caso o grafo possua ownership
+ *          sobre a informação das conexões sem a correspondente função de clonagem (ver
+ *          graph_init()). O grafo retornado é independente do original quanto aos nós, e
+ *          deve ser destruído pelo chamador.
  *
  * @note    A conversão é feita em três etapas: clonagem dos nós, cópia das conexões com
  *          remapeamento dos ponteiros de destino, e inserção das conexões reversas
  *          ausentes. Conexões já mútuas no grafo original não são duplicadas.
+ * @warning Quando @p shared_edges for @c true, o grafo retornado é inicializado sem função
+ *          de destruição de conexões (mesmo que @p graph possua uma), para evitar liberação
+ *          da informação de conexão enquanto @p graph ainda a possui. O chamador deve
+ *          garantir que o grafo retornado seja destruído antes de @p graph.
  */
-graph_t *graph_to_undirected(graph_t *graph);
+graph_t *graph_to_undirected(graph_t *graph, bool shared_edges);
 
 /** @brief   Clona um grafo, criando uma cópia profunda independente.
  *
@@ -334,6 +339,31 @@ edge_t *dijc_get_edge(dijkstra_connections_t *dijc);
  */
 double dijc_get_cost(dijkstra_connections_t *dijc);
 
-graph_t *graph_kruskal(graph_t *graph, edge_cmp cmp, edge_limiter limiter);
+/** @brief    Calcula a árvore geradora mínima de um grafo não-dirigido, selecionando
+  *           apenas as conexões cujo peso (ver @p weight_fn) seja inferior a um limite.
+  *
+  * @param    graph      Pointer para o grafo não-dirigido de origem (ver
+  *                       graph_to_undirected()).
+  * @param    cmp_fn     Função de comparação utilizada para ordenar as conexões por peso
+  *                       antes da construção da árvore (ver edge_cmp_t).
+  * @param    weight_fn  Função que extrai, de uma conexão já pertencente à árvore geradora
+  *                       mínima, o valor a ser comparado contra @p limiter para decidir sua
+  *                       inclusão no grafo retornado.
+  * @param    limiter    Valor limite: conexões com @p weight_fn maior ou igual a este valor
+  *                       não são incluídas no grafo retornado, mesmo pertencendo à árvore.
+  *
+  * @return   Um novo graph_t contendo todos os nós do grafo original e apenas as conexões
+  *           da árvore geradora mínima cujo peso (ver @p weight_fn) seja inferior a
+  *           @p limiter. Retorna @c NULL nas mesmas condições de ownership descritas em
+  *           graph_clone(). O grafo retornado é independente do original e deve ser
+  *           destruído pelo chamador.
+  * @note     A topologia da árvore é decidida considerando todas as conexões do grafo,
+  *           independentemente de @p limiter; o limite apenas filtra quais conexões, já
+  *           parte da árvore, aparecem no grafo retornado.
+  * @warning  A informação associada às conexões do grafo retornado não é clonada: é
+  *           compartilhada com @p graph. O grafo retornado deve ser destruído antes de
+  *           @p graph, para evitar acesso a memória já liberada.
+  */
+graph_t *graph_kruskal(graph_t *graph, edge_cmp_t cmp_fn, graph_weight_t weight_fn, double limiter);
 
 #endif
