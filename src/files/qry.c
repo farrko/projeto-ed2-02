@@ -194,7 +194,12 @@ static void command_mvm(double v, double x, double y, double w, double h, graph_
       line_t *l = line_init(0, point_get_x(src_pos), point_get_y(src_pos), point_get_x(dst_pos), point_get_y(dst_pos), "#000000", false);
 
       bool overlap = rect_line_overlap(box, l);
-      if (overlap) street_set_vm(edge_get_info(edge), v);
+      if (overlap) {
+        street_t *street = edge_get_info(edge);
+        double prev_vm = street_get_vm(street);
+        street_set_vm(street, v);
+        fprintf(txt, "\tEdge modificada: %s -> %s - Velocidade anterior: %.2f / Velocidade atual: %.2f\n", gnode_get_id(edge_get_src(edge)), gnode_get_id(edge_get_dst(edge)), prev_vm, street_get_vm(street));
+      }
       line_destroy(l);
     }
   }
@@ -223,7 +228,7 @@ static void command_regs(double vl, graph_t *graph, FILE *txt, vector_t *added_e
     graph_t *cg = *(graph_t **) vec_at(components, i);
     size_t cg_n = vec_get_size(graph_get_nodes(cg));
 
-    double min_x = INFINITY, min_y = INFINITY, max_x = 0, max_y = 0;
+    double min_x = INFINITY, min_y = INFINITY, max_x = -INFINITY, max_y = -INFINITY;
 
     for (size_t j = 0; j < cg_n; j++) {
       gnode_t *node = *(gnode_t **) vec_at(graph_get_nodes(cg), j);
@@ -235,7 +240,7 @@ static void command_regs(double vl, graph_t *graph, FILE *txt, vector_t *added_e
       if (point_get_y(point) > max_y) max_y = point_get_y(point);
     }
 
-    rectangle_t *bounding_box = rect_init(0, min_x, min_y, max_x - min_x, max_y - min_y, bb_colors[i % 32], bb_colors[i % 32], "2px");
+    rectangle_t *bounding_box = rect_init(0, min_x - 15, min_y - 15, max_x - min_x + 15, max_y - min_y + 15, bb_colors[i % 32], bb_colors[i % 32], "2px");
     shape_t *s = shape_init(RECTANGLE, bounding_box);
     vec_push_back(added_elements, &s);
 

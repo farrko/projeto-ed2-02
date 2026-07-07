@@ -526,7 +526,7 @@ typedef struct {
 
 static bool edge_passes_limiter(edge_t *edge, edge_cmp_t cmp_fn, graph_weight_t weight_fn, double limiter) {
   double value = weight_fn(edge);
-  return cmp_fn(&value, &limiter) >= 0;
+  return cmp_fn(&value, &limiter) < 0;
 }
 
 static void tarjan_visit(tarjan_ctx_t *ctx, gnode_t *node) {
