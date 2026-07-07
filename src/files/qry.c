@@ -202,10 +202,47 @@ static void command_mvm(double v, double x, double y, double w, double h, graph_
   rect_destroy(box);
 }
 
+static int tarjan_cmp(const void *a, const void *b) {
+  double weight = *(double *) a;
+  double limiter = *(double *) b;
+
+  if (weight < limiter) return 1;
+  return -1;
+}
+
 static void command_regs(double vl, graph_t *graph, FILE *txt, vector_t *added_elements) {
   fprintf(txt, "\n\n--- COMANDO REGS --- argumentos: %.2f ---\n\n", vl);
-  (void) graph;
-  (void) added_elements;
+
+  vector_t *components = graph_tarjan(graph, tarjan_cmp, pure_speed_edge, vl);
+  size_t components_n = vec_get_size(components);
+  fprintf(txt, "\tQuantidade de componentes fortemente conexos: %zu\n", components_n);
+
+  const char* bb_colors[32] = { "#E31A1C", "#20DB93", "#A020F0", "#FF7F00", "#1F78B4", "#FFFF33", "#FB9A99", "#33A02C", "#B2DF8A", "#A6CEE3", "#E6AB02", "#7570B3", "#66A61E", "#E7298A", "#1B9E77", "#D95F02", "#8DD3C7", "#FFFFB3", "#BEBADA", "#FB8072", "#80B1D3", "#FDB462", "#B3DE69", "#FCCDE5", "#BC80BD", "#CCEBC5", "#FFED6F", "#1F77B4", "#AEC7E8", "#FF7F0E", "#FFBB78", "#2CA02C" };
+
+  for (size_t i = 0; i < components_n; i++) {
+    graph_t *cg = *(graph_t **) vec_at(components, i);
+    size_t cg_n = vec_get_size(graph_get_nodes(cg));
+
+    double min_x = INFINITY, min_y = INFINITY, max_x = 0, max_y = 0;
+
+    for (size_t j = 0; j < cg_n; j++) {
+      gnode_t *node = *(gnode_t **) vec_at(graph_get_nodes(cg), j);
+      point_t *point = gnode_get_info(node);
+
+      if (point_get_x(point) < min_x) min_x = point_get_x(point);
+      if (point_get_x(point) > max_x) max_x = point_get_x(point);
+      if (point_get_y(point) < min_y) min_y = point_get_y(point);
+      if (point_get_y(point) > max_y) max_y = point_get_y(point);
+    }
+
+    rectangle_t *bounding_box = rect_init(0, min_x, min_y, max_x - min_x, max_y - min_y, bb_colors[i % 32], bb_colors[i % 32], "2px");
+    shape_t *s = shape_init(RECTANGLE, bounding_box);
+    vec_push_back(added_elements, &s);
+
+    graph_destroy(cg);
+  }
+
+  vec_destroy(components);
 }
 
 static void command_exp(double vl, graph_t *graph, FILE *txt, vector_t *added_elements) {

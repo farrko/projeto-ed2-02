@@ -67,7 +67,7 @@ void svg_write_text(svg_t *svg, text_t *text) {
 
 void svg_write_line(svg_t *svg, line_t *line) {
   if (svg == NULL || line == NULL) return;
-  fprintf(svg->svgfile, "<line id=\"%zu\" x1=\"%f\" y1=\"%f\" x2=\"%f\" y2=\"%f\" stroke=\"%s\" stroke-dasharray=\"%s\" />\n", line_get_id(line), line_get_x1(line), line_get_y1(line), line_get_x2(line), line_get_y2(line), line_get_color(line), line_get_dotted(line) ? "10" : "none");
+  fprintf(svg->svgfile, "<line id=\"%zu\" x1=\"%f\" y1=\"%f\" x2=\"%f\" y2=\"%f\" stroke=\"%s\" stroke-dasharray=\"%s\" stroke-width=\"15px\" />\n", line_get_id(line), line_get_x1(line), line_get_y1(line), line_get_x2(line), line_get_y2(line), line_get_color(line), line_get_dotted(line) ? "10" : "none");
 }
 
 void svg_write_path(svg_t *svg, path_t *path) {

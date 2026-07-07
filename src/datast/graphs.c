@@ -510,18 +510,18 @@ graph_t *graph_kruskal(graph_t *graph, edge_cmp_t cmp_fn, graph_weight_t weight_
 }
 
 typedef struct {
-  int      *disc;
-  int      *low;
-  bool     *on_stack;
+  int *disc;
+  int *low;
+  bool *on_stack;
   gnode_t **stack;
-  int       stack_top;
-  int       timer;
-  int      *scc_id;
-  int       scc_count;
+  int stack_top;
+  int timer;
+  int *scc_id;
+  int scc_count;
   hashmap_t *id_to_idx;
   edge_cmp_t cmp_fn;
   graph_weight_t weight_fn;
-  double   limiter;
+  double limiter;
 } tarjan_ctx_t;
 
 static bool edge_passes_limiter(edge_t *edge, edge_cmp_t cmp_fn, graph_weight_t weight_fn, double limiter) {
